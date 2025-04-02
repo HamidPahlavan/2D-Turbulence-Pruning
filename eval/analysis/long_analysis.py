@@ -212,7 +212,7 @@ def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_
             np.savez(os.path.join(analysis_dir_save, 'pdf.npz'), Omega_mean=Omega_mean, Omega_std=Omega_std, Omega_pdf=Omega_pdf, Omega_bins=Omega_bins, bw_scott=bw_scott, U_mean=U_mean, U_std=U_std, U_pdf=U_pdf, U_bins=U_bins, long_analysis_params=long_analysis_params, dataset_params=dataset_params)
 
     # Plotting and saving figures for long analysis
-    notebook_file = "plot.ipynb"
+    notebook_file = "plot_long_analysis_single.ipynb"
 
     # Ensure the notebook file exists
     try: 
