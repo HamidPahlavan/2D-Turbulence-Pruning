@@ -133,7 +133,10 @@ class Trainer():
 
 
         # Set optimizer
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=params["lr"], weight_decay=params["weight_decay"])
+        if params.optimizer_type == 'AdamW':
+            self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=params["lr"], weight_decay=params["weight_decay"], fused=True)
+        else:
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=params["lr"], weight_decay=params["weight_decay"])
 
 
         if dist.is_initialized():

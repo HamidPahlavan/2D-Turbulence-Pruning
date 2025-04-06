@@ -221,7 +221,8 @@ class MAEViT(nn.Module):
       loss = (pred - tar) ** 2
       loss = loss.mean(dim=-1)  # loss per patch
 
-      loss = (loss * mask).sum() / mask.sum()  # loss on removed patches
+      #loss = (loss * mask).sum() / mask.sum()  # loss on removed patches
+      loss = loss.mean()   # loss on whole image
 
       return loss
 
