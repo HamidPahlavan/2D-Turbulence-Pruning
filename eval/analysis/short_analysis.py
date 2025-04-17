@@ -127,6 +127,6 @@ def perform_short_analysis(model, dataloader, dataset, climo_u, climo_v, short_a
         results['wavenumbers'] = wavenumbers_list
 
     if short_analysis_params["plot_analysis"]:
-        plot_analysis(results, short_analysis_params, dataset_params)
+        plot_analysis(results, short_analysis_params, dataset_params, train_params)
 
     return results
