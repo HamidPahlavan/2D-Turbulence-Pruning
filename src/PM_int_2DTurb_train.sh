@@ -10,9 +10,9 @@ source $HOME/set_wandb_key_dpp94.sh
 
 # ------ Define all input args ------ #
 
-YAML_CONFIG=/global/homes/d/dpp94/SSL-for-2D-Turbulence/src/config/vitnet_PM.yaml
-CONFIG=SMAE_PRETRAIN
-RUN_NUM=testing
+YAML_CONFIG=/global/homes/d/dpp94/SSL-for-2D-Turbulence/src/config/vitnet_PM_MAE_mr0.5_seed_20_pf.yaml
+CONFIG=MAE_FINETUNE
+RUN_NUM=0000_MAE_mr0.5_seed_20_pf
 
 
 # ------ Run main script ------ #

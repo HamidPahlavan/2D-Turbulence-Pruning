@@ -10,7 +10,7 @@
 #SBATCH --module=gpu,nccl-2.18                                          
 #SBATCH -o /pscratch/sd/d/dpp94/Logfiles/2DTurb_%x.out
 #SBATCH --mail-type=begin,end,fail                                      
-#SBATCH --mail-user=dpp94@uchicago.edu 
+#SBATCH --mail-user=dpatel505@gmail.com
 
 
 # COMMAND: sbatch -J <job_name> PM_2DTurb_train.sh <run_num> <yaml_config> <config>
