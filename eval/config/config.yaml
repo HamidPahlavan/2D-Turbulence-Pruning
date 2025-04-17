@@ -1,6 +1,6 @@
 dataset_params:
-  run_num: "base"
-  root_dir: "/ocean/projects/phy220045p/jakhar/2d_emulator_vision/SSL-for-2D-Turbulence/results/BASE/"
+  run_num: "test"
+  root_dir: "/ocean/projects/atm170004p/jakhar/2d_emulator_vision/SSL-for-2D-Turbulence/results/BASE/"
   model_filename: "training_checkpoints/best_ckpt.tar"
   params_filename: "hyperparams.yaml"
 
@@ -35,11 +35,12 @@ long_analysis_params:
 # Analysis
   temporal_mean: !!bool True
   zonal_mean: !!bool True
-  zonal_eof: !!bool True
+  zonal_eof_pc: !!bool True
   eof_ncomp: 3
+  PC_autocorr_nlags: 300 # Number of lags (Emulator timesteps) for autocorrelation  # Ensure training/truth data is longer than this (3 times?)
   div: !!bool True
   return_period: !!bool True
   PDF: !!bool False # U, Omega This may need large memory to compute
   video: !!bool True
-  video_length: 1000
+  video_length: 800
 

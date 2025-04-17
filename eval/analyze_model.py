@@ -23,6 +23,8 @@ from analysis.rollout import n_step_rollout, single_step_rollout
 
 logging.basicConfig(level=logging.INFO)
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 def main(config):
     """
     Main function to run analysis on trained model.
@@ -51,7 +53,7 @@ def main(config):
     # Long analysis parameters
     test_length_long = long_analysis_params["analysis_length"]
     save_data_length = long_analysis_params["save_data_length"]
-    zonal_eof = long_analysis_params["zonal_eof"]
+    zonal_eof_pc = long_analysis_params["zonal_eof_pc"]
     eof_ncomp = long_analysis_params["eof_ncomp"]
     video = long_analysis_params["video"]
     video_length = long_analysis_params["video_length"]
@@ -84,9 +86,11 @@ def main(config):
         patch_recovery=train_params["patch_recovery"]
         )
 
-    ckpt_temp = torch.load(model_fp, map_location=torch.device('cpu'))['model_state']
-    ckpt = {key[7:]: val for key, val in ckpt_temp.items()}
-    model.load_state_dict(ckpt)
+    ckpt_temp = torch.load(model_fp, map_location=torch.device(device))['model_state']
+
+    ## Training single vs multiple gpu
+    # ckpt = {key[7:]: val for key, val in ckpt_temp.items()}
+    model.load_state_dict(ckpt_temp)
     model.eval()
 
     # Directory to saved emulated data and analysis
@@ -188,13 +192,23 @@ def main(config):
                                                         pin_memory=train_params["pin_memory"])
 
         inp, tar = next(iter(dataloader_video))
+
+        # if len(files) > 0:
+        #     print('Loading saved data')
+        #     data = np.load(save_dir + f'/{len(files)-1}.npy')
+        #     print(f'Resuming emulation from file {len(files)-1}.npy')
+        #     data = np.array(data)  # Ensure data is a NumPy array
+        #     ic = torch.tensor(data, dtype=torch.float32).unsqueeze(dim=0).unsqueeze(dim=2)  # Convert to tensor with correct dtype
+        # else:
         ic = inp[0].unsqueeze(dim=0)
         print('IC -- ', ic.shape)
+
         for i in range(rollout_length):
             pred, ic = single_step_rollout(model, ic, train_tendencies=train_params["train_tendencies"])
             # ic = pred.clone()
 
-            print(f'#{i} ic shape {ic.shape} -- Pred {pred.shape} ')
+            if i%100==0:
+                print(f'#{i} ic shape {ic.shape} -- Pred {pred.shape} ')
 
             pred_np = pred.clone().transpose(-1,-2).squeeze().detach().cpu().numpy()
 
@@ -212,7 +226,7 @@ def main(config):
         # Calculate number of files in save directory, proceed with analysis if saved data found
         # Log that save data is found
 
-    if long_analysis_params["zonal_eof"] or long_analysis_params["div"] or long_analysis_params["video"] or long_analysis_params["return_period"] or long_analysis_params["temporal_mean"] or long_analysis_params["zonal_mean"]:
+    if long_analysis_params["zonal_eof_pc"] or long_analysis_params["div"] or long_analysis_params["video"] or long_analysis_params["return_period"] or long_analysis_params["temporal_mean"] or long_analysis_params["zonal_mean"]:
         perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_params, train_params)
         print('long analysis performed')
         print(f'save_dir: {save_dir}')
@@ -227,7 +241,7 @@ def main(config):
     # # Plot analysis
     # plot_analysis(results, analysis_dict, run_num, save_dir)
 
-    return results_short
+    return 
 
 
 
@@ -239,4 +253,4 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
 
     # Pass the entire config dictionary to main
-    results_short = main(config)
+    main(config)

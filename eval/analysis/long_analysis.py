@@ -5,6 +5,7 @@ from scipy.io import loadmat
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import imageio
+from statsmodels.tsa.stattools import acf
 
 from py2d.initialize import initialize_wavenumbers_rfft2, gridgen
 from py2d.derivative import derivative
@@ -13,6 +14,7 @@ from py2d.convert import UV2Omega, Omega2UV
 from analysis.metrics import manual_eof, manual_svd_eof, divergence, PDF_compute
 from analysis.rollout import n_step_rollout
 from analysis.io_utils import load_numpy_data, get_npy_files, get_mat_files_in_range, run_notebook_as_script
+from analysis.plot_config import params
 
 def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_params, train_params):
 
@@ -29,7 +31,7 @@ def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_
 
     Kx, Ky, Kabs, Ksq, invKsq = initialize_wavenumbers_rfft2(Nx, Nx, Lx, Ly, INDEXING='ij')
 
-    if long_analysis_params["temporal_mean"] or long_analysis_params["zonal_mean"] or long_analysis_params["zonal_eof"] or long_analysis_params["div"] or long_analysis_params["return_period"]:
+    if long_analysis_params["temporal_mean"] or long_analysis_params["zonal_mean"] or long_analysis_params["zonal_eof_pc"] or long_analysis_params["div"] or long_analysis_params["return_period"]:
         # Load data
         perform_analysis = True
     else:
@@ -130,7 +132,7 @@ def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_
                 V_mean_temp += V
                 Omega_mean_temp += Omega
 
-            if long_analysis_params["zonal_mean"] or long_analysis_params["zonal_eof"]:
+            if long_analysis_params["zonal_mean"] or long_analysis_params["zonal_eof_pc"]:
                 U_zonal_temp = np.mean(U, axis=1)
                 Omega_zonal_temp = np.mean(Omega, axis=1)        
                 U_zonal.append(U_zonal_temp)
@@ -165,15 +167,31 @@ def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_
 
             np.savez(os.path.join(analysis_dir_save, 'temporal_mean.npz'), U_mean=U_mean, V_mean=V_mean, Omega_mean=Omega_mean)
 
-        if long_analysis_params["zonal_eof"] or long_analysis_params["zonal_mean"]:
+        if long_analysis_params["zonal_eof_pc"] or long_analysis_params["zonal_mean"]:
 
             U_zonal_mean = np.mean(U_zonal, axis=0)
             U_zonal_anom = np.array(U_zonal) - U_zonal_mean
             EOF_U, PC_U, exp_var_U = manual_eof(U_zonal_anom, long_analysis_params["eof_ncomp"])
 
+            PC_acf_U= []
+
+            if dataset == 'train' or dataset == 'truth':
+                n_lags = train_params["target_step"]* long_analysis_params["PC_autocorr_nlags"]
+            else:
+                n_lags = long_analysis_params["PC_autocorr_nlags"]
+
+            for i in range(long_analysis_params["eof_ncomp"]):
+                acf_i, confint_i = acf(PC_U[:, i], nlags=n_lags, alpha=0.5)
+                PC_acf_U.append({"acf": acf_i, "confint": confint_i})
+
             Omega_zonal_mean = np.mean(Omega_zonal, axis=0)
             Omega_zonal_anom = np.array(Omega_zonal) - Omega_zonal_mean
             EOF_Omega, PC_Omega, exp_var_Omega = manual_eof(Omega_zonal_anom, long_analysis_params["eof_ncomp"])
+
+            PC_acf_Omega = []
+            for i in range(long_analysis_params["eof_ncomp"]):
+                acf_i, confint_i = acf(PC_Omega[:, i], nlags=n_lags, alpha=0.5)
+                PC_acf_Omega.append({"acf": acf_i, "confint": confint_i})
 
             # ## Scikit-learn
 
@@ -191,8 +209,8 @@ def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_
             # EOF_U_svd, PC_U_svd, expvar_U_svd = manual_svd_eof(U_zonal_anom)
             # EOF_Omega_svd, PC_Omega_svd, expvar_Omega_svd = manual_svd_eof(Omega_zonal_anom)
 
-            # np.savez(os.path.join(analysis_dir_save, 'zonal_eof.npz'), EOF_U=EOF_U, PC_U=PC_U, exp_var_U=exp_var_U, EOF_Omega=EOF_Omega, PC_Omega=PC_Omega, exp_var_Omega=exp_var_Omega, EOF_U_sklearn=EOF_U_sklearn, PC_U_sklearn=PC_U_sklearn, expvar_U_sklearn=expvar_U_sklearn, EOF_Omega_sklearn=EOF_Omega_sklearn, PC_Omega_sklearn=PC_Omega_sklearn, expvar_Omega_sklearn=expvar_Omega_sklearn, EOF_U_svd=EOF_U_svd, PC_U_svd=PC_U_svd, expvar_U_svd=expvar_U_svd, EOF_Omega_svd=EOF_Omega_svd, PC_Omega_svd=PC_Omega_svd, expvar_Omega_svd=expvar_Omega_svd)
-            np.savez(os.path.join(analysis_dir_save, 'zonal_eof.npz'), EOF_U=EOF_U, PC_U=PC_U, exp_var_U=exp_var_U, EOF_Omega=EOF_Omega, PC_Omega=PC_Omega, exp_var_Omega=exp_var_Omega, long_analysis_params=long_analysis_params, dataset_params=dataset_params)
+            # np.savez(os.path.join(analysis_dir_save, 'zonal_eof_pc.npz'), EOF_U=EOF_U, PC_U=PC_U, exp_var_U=exp_var_U, EOF_Omega=EOF_Omega, PC_Omega=PC_Omega, exp_var_Omega=exp_var_Omega, EOF_U_sklearn=EOF_U_sklearn, PC_U_sklearn=PC_U_sklearn, expvar_U_sklearn=expvar_U_sklearn, EOF_Omega_sklearn=EOF_Omega_sklearn, PC_Omega_sklearn=PC_Omega_sklearn, expvar_Omega_sklearn=expvar_Omega_sklearn, EOF_U_svd=EOF_U_svd, PC_U_svd=PC_U_svd, expvar_U_svd=expvar_U_svd, EOF_Omega_svd=EOF_Omega_svd, PC_Omega_svd=PC_Omega_svd, expvar_Omega_svd=expvar_Omega_svd)
+            np.savez(os.path.join(analysis_dir_save, 'zonal_eof_pc.npz'), EOF_U=EOF_U, PC_U=PC_U, exp_var_U=exp_var_U, PC_acf_U=PC_acf_U, EOF_Omega=EOF_Omega, PC_Omega=PC_Omega, exp_var_Omega=exp_var_Omega, PC_acf_Omega=PC_acf_Omega, long_analysis_params=long_analysis_params, dataset_params=dataset_params)
             np.savez(os.path.join(analysis_dir_save, 'zonal_mean.npz'), U_zonal_mean=U_zonal_mean, Omega_zonal_mean=Omega_zonal_mean, long_analysis_params=long_analysis_params, dataset_params=dataset_params)
 
         if long_analysis_params["div"]:
@@ -240,19 +258,21 @@ def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_
         for t in range(long_analysis_params["video_length"]):
             if t%1 == 0:
                 fig, axs = plt.subplots(nrows=2, ncols=2, sharex=True, sharey=True)
+                plt.rcParams.update(params)
+
                 axs = axs.flatten()
 
                 data_emulate = np.load(os.path.join(save_dir, files_emulate[t]))
                 U_emulate = data_emulate[0,:]
                 V_emulate = data_emulate[1,:]
 
-                data_train = loadmat(os.path.join(train_params["data_dir"], 'data', files_train[3*t]))
+                data_train = loadmat(os.path.join(train_params["data_dir"], 'data', files_train[train_params["target_step"]*t]))
                 Omega_train = data_train['Omega'].T
                 U_transpose, V_transpose = Omega2UV(Omega_train.T, Kx, Ky, invKsq, spectral = False)
                 U_train, V_train = U_transpose.T, V_transpose.T
 
                 data = [U_emulate, V_emulate, U_train, V_train]
-                titles = ['ML: U', 'ML: V', 'Truth: U', 'Truth: V']
+                titles = [r'$u$ Emulator', r'$v$ Emulator', r'$u$ Truth', r'$v$ Truth']
 
                 for i, ax in enumerate(axs):
 
