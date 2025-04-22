@@ -10,6 +10,8 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from utils.diagnostics import grad_norm, grad_max, log_input_target_prediction
 from utils.preprocessor import get_spectral_preprocessor
+import glob
+from natsort import natsorted
 #from torch.profiler import profile, record_function, ProfilerActivity
 
 #torch.backends.cuda.enable_flash_sdp(True)
@@ -149,9 +151,11 @@ class Trainer():
         self.iters = 0
         self.startEpoch = 0
         if params.resuming:
-            self.restore_checkpoint(params.checkpoint_path)
+            checkpoint_path = natsorted([file for file in glob.glob(self.params.checkpoint_path_globstr) if os.path.isfile(file)])[-1]
+            print(f'RESTORE CKPT: {checkpoint_path}')
+            self.restore_checkpoint(checkpoint_path)
         else:
-            logging.info("Starting fresh training run.")
+            logging.info("Starting fresh training run")
 
         self.epoch = self.startEpoch
 
@@ -236,12 +240,13 @@ class Trainer():
 
             if self.world_rank == 0:
                if self.params.save_checkpoint:
-                  self.save_checkpoint(self.params.checkpoint_path)
+                  checkpoint_path_out = '_'.join(self.params.checkpoint_path_globstr.split('_')[:-1])
+                  self.save_checkpoint(checkpoint_path_out + f'.tar')
                   if valid_logs["valid_loss"] <= best_valid_loss:
                      self.save_checkpoint(self.params.best_checkpoint_path)
                   if (self.epoch+1) in self.params.ckpt_epoch_list:
                       logging.info(f"Saving checkpoint at epoch {self.epoch+1}")
-                      self.save_checkpoint(self.params.checkpoint_epoch_path + f'_{self.epoch+1}.tar')
+                      self.save_checkpoint(checkpoint_path_out + f'_{self.epoch+1}.tar')
 
 
             if self.params["log_to_screen"]:
@@ -457,7 +462,7 @@ class Trainer():
             new_state_dict = OrderedDict()
             for key, value in checkpoint['model_state'].items():
                 name = key[7:]
-                new_state_dict[name] = val
+                new_state_dict[name] = value
             self.model.load_state_dict(new_state_dict)
         self.iters = checkpoint['iters']
         self.startEpoch = checkpoint['epoch']

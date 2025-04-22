@@ -77,7 +77,7 @@ class FourierFilterPreprocessor(nn.Module):
 
         if not self.randomized_filters:
             # Create single filter
-            shift_x, shift_y = self.window_center_kx[0], self.window_center_ky[0]
+            shift_x, shift_y = self.window_center_kx[0] - self.mask_width//2, self.window_center_ky[0] - self.mask_width//2
             f1, f2 = self._create_filter_kernel((shift_x, shift_y))
             # Expand into batch shape
             f1 = f1.unsqueeze(0).unsqueeze(0).unsqueeze(0)   # shape (1, 1, 1, h, w)
