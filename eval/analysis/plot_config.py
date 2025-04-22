@@ -15,7 +15,7 @@ BIGGER_SIZE = 16
 
 # Set default properties
 params = {
-    'text.usetex': True,  # Use LaTeX to interpret text
+    # 'text.usetex': True,  # Use LaTeX to interpret text
     # 'pgf.texsystem': 'pdflatex',  # Enable pgf backend using pdflatex
     # 'pgf.preamble': r'\usepackage{amsmath}',  # Enable LaTeX math for pgf backend
     'text.latex.preamble': r'\usepackage{amsmath}', 

@@ -88,9 +88,9 @@ def main(config):
 
     ckpt_temp = torch.load(model_fp, map_location=torch.device(device))['model_state']
 
-    ## Training single vs multiple gpu
-    # ckpt = {key[7:]: val for key, val in ckpt_temp.items()}
-    model.load_state_dict(ckpt_temp)
+    # Training single vs multiple gpu
+    ckpt = {key[7:]: val for key, val in ckpt_temp.items()}
+    model.load_state_dict(ckpt)
     model.eval()
 
     # Directory to saved emulated data and analysis
