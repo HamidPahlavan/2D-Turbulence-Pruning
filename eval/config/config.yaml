@@ -40,7 +40,9 @@ long_analysis_params:
   PC_autocorr_nlags: 300 # Number of lags (Emulator timesteps) for autocorrelation  # Ensure training/truth data is longer than this (3 times?)
   div: !!bool True
   return_period: !!bool True
-  PDF: !!bool False # U, Omega This may need large memory to compute
+  return_period_anomaly: !!bool True # This requires calclation of temporal_mean
+  PDF_U: !!bool False # This may need large memory to compute
+  PDF_Omega: !!bool False # This may need large memory to compute
   video: !!bool True
   video_length: 800
 

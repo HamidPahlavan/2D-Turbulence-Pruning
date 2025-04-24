@@ -24,6 +24,7 @@ from analysis.rollout import n_step_rollout, single_step_rollout
 logging.basicConfig(level=logging.INFO)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+gpu_count = torch.cuda.device_count()
 
 def main(config):
     """
@@ -89,7 +90,10 @@ def main(config):
     ckpt_temp = torch.load(model_fp, map_location=torch.device(device))['model_state']
 
     # Training single vs multiple gpu
-    ckpt = {key[7:]: val for key, val in ckpt_temp.items()}
+    if gpu_count > 1:
+        ckpt = {key[7:]: val for key, val in ckpt_temp.items()}
+    else:
+        ckpt = ckpt_temp
     model.load_state_dict(ckpt)
     model.eval()
 
@@ -226,7 +230,8 @@ def main(config):
         # Calculate number of files in save directory, proceed with analysis if saved data found
         # Log that save data is found
 
-    if long_analysis_params["zonal_eof_pc"] or long_analysis_params["div"] or long_analysis_params["video"] or long_analysis_params["return_period"] or long_analysis_params["temporal_mean"] or long_analysis_params["zonal_mean"]:
+    if long_analysis_params["zonal_eof_pc"] or long_analysis_params["div"] or long_analysis_params["video"] or long_analysis_params["temporal_mean"] or long_analysis_params["zonal_mean"] or \
+        long_analysis_params["return_period"] or long_analysis_params["return_period_anomaly"] or long_analysis_params["PDF_U"] or long_analysis_params["PDF_Omega"]:
         perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_params, train_params)
         print('long analysis performed')
         print(f'save_dir: {save_dir}')
