@@ -10,6 +10,7 @@ from statsmodels.tsa.stattools import acf
 from py2d.initialize import initialize_wavenumbers_rfft2, gridgen
 from py2d.derivative import derivative
 from py2d.convert import UV2Omega, Omega2UV
+from py2d.spectra import spectrum_angled_average, spectrum_zonal_average
 
 from analysis.metrics import manual_eof, manual_svd_eof, divergence, PDF_compute
 from analysis.rollout import n_step_rollout
@@ -99,6 +100,8 @@ def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_
         div = []
         U_max, U_min, V_max, V_min, Omega_max, Omega_min = [], [], [], [], [], []
         U_max_anom_arr, U_min_anom_arr, V_max_anom_arr, V_min_anom_arr, Omega_max_anom_arr, Omega_min_anom_arr = [], [], [], [], [], []
+        spectra_U_angular_avg_arr, spectra_V_angular_avg_arr, spectra_Omega_angular_avg_arr = [], [], []
+        spectra_U_zonal_avg_arr, spectra_V_zonal_avg_arr, spectra_Omega_zonal_avg_arr = [], [], []
 
         Omega_arr = []
         U_arr = []
@@ -142,6 +145,30 @@ def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_
                 U_mean_temp += U
                 V_mean_temp += V
                 Omega_mean_temp += Omega
+
+            if long_analysis_params["spectra"]:
+
+                ## Angular Averaged Spectra
+                U_abs_hat = np.sqrt(np.fft.fft2(U)*np.conj(np.fft.fft2(U)))
+                V_abs_hat = np.sqrt(np.fft.fft2(V)*np.conj(np.fft.fft2(V)))
+                Omega_abs_hat = np.sqrt(np.fft.fft2(Omega)*np.conj(np.fft.fft2(Omega)))
+
+                spectra_U_temp, wavenumber_angular_avg = spectrum_angled_average(U_abs_hat, spectral=True)
+                spectra_V_temp, wavenumber_angular_avg = spectrum_angled_average(V_abs_hat, spectral=True)
+                spectra_Omega_temp, wavenumber_angular_avg = spectrum_angled_average(Omega_abs_hat, spectral=True)
+
+                spectra_U_angular_avg_arr.append(spectra_U_temp)
+                spectra_V_angular_avg_arr.append(spectra_V_temp)
+                spectra_Omega_angular_avg_arr.append(spectra_Omega_temp)
+
+                ## Zonal Spectra
+                spectra_U_temp, wavenumber_zonal_avg = spectrum_zonal_average(U.T)
+                spectra_V_temp, wavenumber_zonal_avg = spectrum_zonal_average(V.T)
+                spectra_Omega_temp, wavenumber_zonal_avg = spectrum_zonal_average(Omega.T)
+
+                spectra_U_zonal_avg_arr.append(spectra_U_temp)
+                spectra_V_zonal_avg_arr.append(spectra_V_temp)
+                spectra_Omega_zonal_avg_arr.append(spectra_Omega_temp)
 
             if long_analysis_params["zonal_mean"] or long_analysis_params["zonal_eof_pc"]:
                 U_zonal_temp = np.mean(U, axis=1)
@@ -193,6 +220,21 @@ def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_
 
             print('mean', dataset, total_files_analyzed)
             np.savez(os.path.join(analysis_dir_save, 'temporal_mean.npz'), U_sample_mean=U_mean, V_sample_mean=V_mean, Omega_sample_mean=Omega_mean, long_analysis_params=long_analysis_params, dataset_params=dataset_params)
+
+        if long_analysis_params["spectra"]:
+
+            spectra_U_angular_avg = np.mean(spectra_U_angular_avg_arr, axis=0)
+            spectra_V_angular_avg = np.mean(spectra_V_angular_avg_arr, axis=0)
+            spectra_Omega_angular_avg = np.mean(spectra_Omega_angular_avg_arr, axis=0)
+
+            spectra_U_zonal_avg = np.mean(spectra_U_zonal_avg_arr, axis=0)
+            spectra_V_zonal_avg = np.mean(spectra_V_zonal_avg_arr, axis=0)
+            spectra_Omega_zonal_avg = np.mean(spectra_Omega_zonal_avg_arr, axis=0)
+
+            np.savez(os.path.join(analysis_dir_save, 'spectra.npz'), 
+                spectra_U_angular_avg=spectra_U_angular_avg, spectra_V_angular_avg=spectra_V_angular_avg, spectra_Omega_angular_avg=spectra_Omega_angular_avg, wavenumber_angular_avg=wavenumber_angular_avg, 
+                spectra_U_zonal_avg=spectra_U_zonal_avg, spectra_V_zonal_avg=spectra_V_zonal_avg, spectra_Omega_zonal_avg=spectra_Omega_zonal_avg, wavenumber_zonal_avg=wavenumber_zonal_avg,
+                long_analysis_params=long_analysis_params, dataset_params=dataset_params)
 
         if long_analysis_params["zonal_eof_pc"] or long_analysis_params["zonal_mean"]:
 
