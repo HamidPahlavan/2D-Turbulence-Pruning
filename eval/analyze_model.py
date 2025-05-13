@@ -197,17 +197,25 @@ def main(config):
 
         inp, tar = next(iter(dataloader_video))
 
-        # if len(files) > 0:
-        #     print('Loading saved data')
-        #     data = np.load(save_dir + f'/{len(files)-1}.npy')
-        #     print(f'Resuming emulation from file {len(files)-1}.npy')
-        #     data = np.array(data)  # Ensure data is a NumPy array
-        #     ic = torch.tensor(data, dtype=torch.float32).unsqueeze(dim=0).unsqueeze(dim=2)  # Convert to tensor with correct dtype
-        # else:
-        ic = inp[0].unsqueeze(dim=0)
+        if len(files) > 0:
+            print('Loading saved data')
+            data = np.zeros((train_params["in_chans"], train_params["num_frames"], train_params["img_size"], train_params["img_size"]))
+            # Note temporal order of ic: (t, t-1, t-2, ...)
+            for step in range(train_params["num_frames"]):
+                print(f'Loading {len(files)-1-step}.npy')
+                data_temp = np.load(save_dir + f'/{len(files)-1-step}.npy')
+                # Normalize data
+                data_temp[0,:] = (data_temp[0,:] - dataset.input_mean[0]) / dataset.input_std[0]
+                data_temp[1,:] = (data_temp[1,:]  - dataset.input_mean[1]) / dataset.input_std[1]
+                data[:, step, :, :] = data_temp
+            print(f'Loaded npy IC shape (c, t, h, w) {data.shape}')
+            print(f'Resuming emulation from file {len(files)-1}.npy for {rollout_length - len(files)} steps.')
+            ic = torch.tensor(data, dtype=torch.float32).unsqueeze(dim=0).transpose(-1, -2)  # Convert to tensor with correct dtype
+        else:
+            ic = inp[0].unsqueeze(dim=0)
         print('IC -- ', ic.shape)
 
-        for i in range(rollout_length):
+        for i in range(len(files), rollout_length):
             pred, ic = single_step_rollout(model, ic, train_tendencies=train_params["train_tendencies"])
             # ic = pred.clone()
 
