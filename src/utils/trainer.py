@@ -86,7 +86,7 @@ class Trainer():
 
         # If finetuning, load pre-trained model weights
         if params["mae_finetune"]:
-            checkpoint_model_temp = torch.load(params["mae_finetune_fp"], map_location='cpu')['model_state']
+            checkpoint_model_temp = torch.load(params["mae_finetune_fp"], map_location='cpu', weights_only=False)['model_state']
             checkpoint_model = {}
             for key, val in checkpoint_model_temp.items():
                 key_new = key[7:]                  # Removing 'module.' that is appended before each key by DDP

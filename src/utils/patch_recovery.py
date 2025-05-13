@@ -145,8 +145,10 @@ class SubPixelConvICNR_3D(nn.Module):
     def __init__(self, img_size, patch_size, in_chans, out_chans):
         super().__init__()
         self.img_size = img_size
+        self.patch_size_t = patch_size[0]
         assert patch_size[1] == patch_size[2], 'mismatch'
-        self.conv = nn.Conv2d(in_chans//2, out_chans*patch_size[1]**2, kernel_size=3, stride=1, padding=1, bias=0, padding_mode='circular')
+        self.in_chans_per_frame = in_chans // patch_size[0]  # patch_size is tubelet size
+        self.conv = nn.Conv2d(self.in_chans_per_frame, out_chans*patch_size[1]**2, kernel_size=3, stride=1, padding=1, bias=0, padding_mode='circular')
         self.pixelshuffle = nn.PixelShuffle(patch_size[1])
         weight = ICNR(self.conv.weight,
                       initializer=nn.init.kaiming_normal_,
@@ -156,7 +158,7 @@ class SubPixelConvICNR_3D(nn.Module):
     def forward(self, x: torch.Tensor):
         # first, split in dimension
         # print(x.shape)
-        x = x.reshape(x.shape[0], x.shape[1]//2, 2, *x.shape[2:]).flatten(2, 3)[:, :, 0:self.img_size[0]] # to make 13 vertical dims
+        x = x.reshape(x.shape[0], self.in_chans_per_frame, self.patch_size_t, *x.shape[2:]).flatten(2, 3)[:, :, 0:self.img_size[0]] # to make 13 vertical dims
         #print(x.shape)
         x = x.movedim(-3, 1).flatten(0, 1)
         output = self.conv(x)

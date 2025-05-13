@@ -70,7 +70,7 @@ class ViT(nn.Module):
           self.patchrecovery = PatchRecovery3D((num_out_frames,img_size,img_size), (num_frames//tubelet_size,patch_size,patch_size),
                                                 decoder_embed_dim, in_chans)
       elif patch_recovery == 'subpixel_conv':
-          self.patchrecovery = SubPixelConvICNR_3D((num_out_frames,img_size,img_size), (num_frames//tubelet_size,patch_size,patch_size),
+          self.patchrecovery = SubPixelConvICNR_3D((num_out_frames,img_size,img_size), (tubelet_size,patch_size,patch_size),
                                                    decoder_embed_dim, in_chans)
       self.patch_recovery = patch_recovery
       self.num_out_frames = num_out_frames

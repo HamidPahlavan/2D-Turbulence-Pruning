@@ -87,13 +87,13 @@ def main(config):
         patch_recovery=train_params["patch_recovery"]
         )
 
-    ckpt_temp = torch.load(model_fp, map_location=torch.device(device))['model_state']
+    ckpt_temp = torch.load(model_fp, map_location=torch.device(device), weights_only=False)['model_state']
 
     # Training single vs multiple gpu
-    if gpu_count > 1:
-        ckpt = {key[7:]: val for key, val in ckpt_temp.items()}
-    else:
-        ckpt = ckpt_temp
+    #if gpu_count > 1:
+    ckpt = {key[7:]: val for key, val in ckpt_temp.items()}
+    #else:
+    #    ckpt = ckpt_temp
     model.load_state_dict(ckpt)
     model.eval()
 
