@@ -38,6 +38,42 @@ def get_npy_files(folder_path):
 
 def get_mat_files_in_range(data_dir, file_range):
     """
+    Retrieves .mat file names within the specified range or ranges.
+
+    Args:
+        data_dir (str): Path to the directory containing .mat files.
+        file_range (list): A single [start, end] list or a list of such lists.
+
+    Returns:
+        list: List of .mat file names within the specified range(s).
+    """
+    def in_any_range(number, ranges):
+        """Check if number falls in any of the given ranges."""
+        return any(start <= number <= end for start, end in ranges)
+
+    # Normalize to list of ranges
+    if not file_range or not isinstance(file_range[0], list):
+        ranges = [file_range]  # Single range case
+    else:
+        ranges = file_range    # List of ranges
+
+    all_files = os.listdir(data_dir)
+    filtered_files = []
+
+    for file_name in all_files:
+        if file_name.endswith('.mat'):
+            try:
+                number = int(os.path.splitext(file_name)[0])
+                if in_any_range(number, ranges):
+                    filtered_files.append(file_name)
+            except ValueError:
+                pass  # Skip files without numeric names
+
+    filtered_files.sort(key=lambda x: int(os.path.splitext(x)[0]))
+    return filtered_files
+
+def get_mat_files_in_range_old(data_dir, file_range):
+    """
     Retrieves .mat file names within the specified range.
 
     Args:
