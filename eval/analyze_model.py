@@ -97,6 +97,10 @@ def main(config):
     model.load_state_dict(ckpt)
     model.eval()
 
+    print(f'TORCH DEVICE: {device}')
+    model.to(device)
+    print(f'MODEL.device: {next(model.parameters()).device}')
+
     # Directory to saved emulated data and analysis
     save_dir = os.path.join(root_dir, 'data')  # or create a separate directory if desired
     analysis_dir = os.path.join(root_dir, 'analysis')
@@ -145,7 +149,7 @@ def main(config):
         climo_u = climo_data[:,0].mean(axis=0)                                       # [X, Y]
         climo_v = climo_data[:,1].mean(axis=0) 
 
-        results_short = perform_short_analysis(model, dataloader, dataset, climo_u, climo_v, short_analysis_params, train_params, dataset_params)
+        results_short = perform_short_analysis(model, dataloader, dataset, climo_u, climo_v, short_analysis_params, train_params, dataset_params, device)
         print('short analysis performed')
 
         if short_analysis_params["save_short_analysis"]:
@@ -214,6 +218,9 @@ def main(config):
         else:
             ic = inp[0].unsqueeze(dim=0)
         print('IC -- ', ic.shape)
+
+        ic = ic.to(device, dtype=torch.float32)
+        print(f'IC.device: {ic.device}')
 
         for i in range(len(files), rollout_length):
             pred, ic = single_step_rollout(model, ic, train_tendencies=train_params["train_tendencies"])

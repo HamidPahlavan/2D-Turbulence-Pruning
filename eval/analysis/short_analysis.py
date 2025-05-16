@@ -1,9 +1,10 @@
 import numpy as np
+import torch
 from analysis.metrics import get_rmse, get_acc, get_spectra
 from analysis.rollout import n_step_rollout
 from analysis.visualization import plot_analysis
 
-def perform_short_analysis(model, dataloader, dataset, climo_u, climo_v, short_analysis_params, train_params, dataset_params):
+def perform_short_analysis(model, dataloader, dataset, climo_u, climo_v, short_analysis_params, train_params, dataset_params, device):
     """
     Perform short-run analyses that do not require saving/loading of large data sets.
     Returns a dictionary of results.
@@ -23,7 +24,7 @@ def perform_short_analysis(model, dataloader, dataset, climo_u, climo_v, short_a
 
     for i, batch in enumerate(dataloader):
         print(f'Prediction iteration: {i}')
-        inputs, targets = batch
+        inputs, targets = batch[0].to(device, dtype=torch.float32), batch[1].to(device, dtype=torch.float32)
         ic = inputs[0].unsqueeze(dim=0)
         n_steps = inputs.shape[0]
 
