@@ -6,45 +6,45 @@ dataset_params:
 
 short_analysis_params:
 # on the fly analysis - plots are saved
-  rmse: !!bool False
-  acc: !!bool False
-  spectra: !!bool False
+  rmse: !!bool True
+  acc: !!bool True
+  spectra: !!bool True
   spectra_leadtimes: [0, 5, 10, 99]
   analysis_length: 100 # number of training timesteps
   num_ensembles: 10
   test_file_start_idx: 350000
   test_length_climo: 1000
-  plot_analysis: !!bool False
-  save_short_analysis: !!bool False
+  plot_analysis: !!bool True
+  save_short_analysis: !!bool True
   
 long_analysis_params:
 # For Train: Details would be taken from training config file
-  long_analysis_train: !!bool False
+  long_analysis_train: !!bool True
 
 # For Truth
-  long_analysis_truth: !!bool False
+  long_analysis_truth: !!bool True
   truth_file_range: [5000, 1005000]
 
 # For emualtor
   long_analysis_emulator: !!bool True
 # Data would be saved to perform any long analysis for emulator
-  save_data_length: 30 # number of training timesteps emulated and saved
-  num_snapshots_per_file: 10 # number of snapshots saved in a single file
-  analysis_length: 30 # number of trasining timesteps emulated for analysis (
+  save_data_length: 10000 # number of training timesteps emulated and saved
+  num_snapshots_per_file: 1000 # number of snapshots saved in a single file
+  analysis_length: 10000 # number of trasining timesteps emulated for analysis (
   # For Training data analysis_length is the smaller value in between analysis_length vs training_length
 
 # Analysis
-  temporal_mean: !!bool False
-  zonal_mean: !!bool False
-  spectra: !!bool False
-  zonal_eof_pc: !!bool False
+  temporal_mean: !!bool True
+  zonal_mean: !!bool True
+  spectra: !!bool True
+  zonal_eof_pc: !!bool True
   eof_ncomp: 3
   PC_autocorr_nlags: 300 # Number of lags (Emulator timesteps) for autocorrelation  # Ensure training/truth data is longer than this (3 times?)
-  div: !!bool False
+  div: !!bool True
   return_period: !!bool False
   return_period_anomaly: !!bool False # This requires calclation of temporal_mean
   PDF_U: !!bool False # This may need large memory to compute
   PDF_Omega: !!bool False # This may need large memory to compute
-  video: !!bool False
-  video_length: 800
+  video: !!bool True
+  video_length: 300
 

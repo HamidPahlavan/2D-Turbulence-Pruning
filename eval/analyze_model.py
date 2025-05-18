@@ -159,140 +159,113 @@ def main(config):
     else:
         print('No short analysis requested')
 
-    # Number of files to be saved
-    save_data_length = np.maximum(long_analysis_params["save_data_length"], long_analysis_params["analysis_length"])
 
-    # Check if data exists in the saved folder
-    files = get_npy_files(save_dir)
 
-    if len(files) > 0:
-        if len(files) < save_data_length:
-            print(f'Only {len(files)} files found. Generating {len(files)} files')
-            save_data = True
-        else:
-            print(f'{len(files)} files found. Skipping data generation')
-            save_data = False
-    else:
-        save_data = True
+    if long_analysis_params["long_analysis_emulator"]:
 
-    print(f'Saving data for {save_data_length} snapshots')
+        # Number of files to be saved
+        save_data_length = np.maximum(long_analysis_params["save_data_length"], long_analysis_params["analysis_length"])
 
-    if save_data and long_analysis_params["long_analysis_emulator"]:
-
+        # Check if data exists in the saved folder
+        files = get_npy_files(save_dir)
 
         rollout_length = save_data_length
 
-        # initializing dataloader for loading intial conditions
-        test_file_range_video = (test_file_start_idx, test_file_start_idx+(video_length*train_params["target_step"])+train_params["target_step"])
-        dataloader_video, dataset_video = get_dataloader(data_dir=train_params["data_dir"],
-                                                        file_range=test_file_range_video,
-                                                        target_step=train_params["target_step"],
-                                                        train_tendencies=train_params["train_tendencies"],
-                                                        batch_size=video_length,
-                                                        train=False,
-                                                        stride=train_params["target_step"],
-                                                        distributed=dist.is_initialized(),
-                                                        num_frames=train_params["num_frames"],
-                                                        num_out_frames=train_params["num_out_frames"],
-                                                        num_workers=2,
-                                                        pin_memory=train_params["pin_memory"])
+        C = train_params["in_chans"]
+        T = train_params["num_frames"]
+        H = train_params["img_size"]
+        W = train_params["img_size"]
+        chunk_size = long_analysis_params["num_snapshots_per_file"]
 
-        inp, tar = next(iter(dataloader_video))
+        if T > chunk_size:
+            raise ValueError(f"num_frames ({T}) exceeds num_snapshots_per_file ({chunk_size}).")
 
-        if len(files) > 0:
+        if files:
+
+            last_file = files[-1]
 
             try:
-                chunk = np.load(os.path.join(save_dir, files[-1]))
-            except:
-                # If the last files is corrupted; use second last file
+                chunk = np.load(os.path.join(save_dir, last_file))  # expects shape (chunk_size, C, H, W)
+            except Exception:
+                # drop corrupted final file and retry once
+                print(Exception)
                 files.pop()
-                chunk = np.load(os.path.join(save_dir, files[-1]))
+                last_file = files[-1]
+                chunk = np.load(os.path.join(save_dir, last_file))
 
-            if chunk.ndim == 4:
-                is_chunked = True
-            elif chunk.ndim == 3:
-                is_chunked = False
-            else:
-                raise ValueError(f"Unexpected array shape {chunk.shape} in saved file")
+            if chunk.ndim != 4:
+                raise ValueError(f"Expected 4D chunk but got shape {chunk.shape}")
+
+            # grab the last T frames
+            last_T = chunk[-T:][::-1]  # shape (T, C, H, W) # Note temporal order is: (t, t-1, t-2, ...)
+
             print('Loading saved data')
-            data = np.zeros((train_params["in_chans"], train_params["num_frames"], train_params["img_size"], train_params["img_size"]))
-            # Note temporal order of ic: (t, t-1, t-2, ...)
+            # normalize & stack into data[c, t, h, w]
+            data = np.empty((C, T, H, W), dtype=np.float32) # shape (C, T, H, W)   # Note temporal order of ic: (t, t-1, t-2, ...)
 
-            if is_chunked:
+            for t, frame in enumerate(last_T):
+                for ch in range(C):
+                    data[ch, t] = (frame[ch] - dataset.input_mean[ch]) / dataset.input_std[ch]
 
-                # take the last T frames
-                last_T = chunk[-train_params["num_frames"]:]
 
-                for t, frame in enumerate(last_T):
-                    f = frame.copy()
-                    # normalize per-channel
-                    f[0] = (f[0] - dataset.input_mean[0]) / dataset.input_std[0]
-                    f[1] = (f[1] - dataset.input_mean[1]) / dataset.input_std[1]
-                    data[:, t] = f
-            else:
-                for step in range(train_params["num_frames"]):
-                    
-                    try:
-                        # Try loading the file at the expected index
-                        file_num = len(files)-1-step
-                        data_temp = np.load(os.path.join(save_dir, f'{filenum}.npy'))
-                    except (IOError, FileNotFoundError):
-                        # If the file is missing or corrupted, try the previous file
-                        file_num = len(files)-2-step
-                        data_temp = np.load(os.path.join(save_dir, f'{filenum}.npy'))
-                    print(f'Loaded {filenum}.npy')
-
-                    # Normalize data
-                    data_temp[0,:] = (data_temp[0,:] - dataset.input_mean[0]) / dataset.input_std[0]
-                    data_temp[1,:] = (data_temp[1,:]  - dataset.input_mean[1]) / dataset.input_std[1]
-                    data[:, step, :, :] = data_temp
             print(f'Loaded npy IC shape (c, t, h, w) {data.shape}')
             print(f'Resuming emulation from file {files[-1]}')
-            ic = torch.tensor(data, dtype=torch.float32).unsqueeze(dim=0).transpose(-1, -2)  # Convert to tensor with correct dtype
+            ic = torch.tensor(data, dtype=torch.float32).unsqueeze(dim=0).transpose(-1, -2).to(device)  # Convert to tensor with correct dtype
             
-            
-            idx_str   = re.findall(r'\d+', files[-1])[-1]
-            current_rollout_length = int(idx_str)
+            # extract numeric iteration from filename (e.g. "20" from "20.npy")
+            idx = int(re.findall(r"\d+", last_file)[-1])
+            current_rollout_length = idx
+            print(f"Loaded IC from {last_file}, resuming at step {idx}.")
         else:
-            ic = inp[0].unsqueeze(dim=0)
-            current_rollout_length = 0
-        print('IC -- ', ic.shape)
 
-        ic = ic.to(device, dtype=torch.float32)
-        print(f'IC.device: {ic.device}')
+            # initializing dataloader for loading intial conditions
+            test_file_range_video = (test_file_start_idx, test_file_start_idx+(video_length*train_params["target_step"])+train_params["target_step"])
+            dataloader_video, dataset_video = get_dataloader(data_dir=train_params["data_dir"],
+                                                            file_range=test_file_range_video,
+                                                            target_step=train_params["target_step"],
+                                                            train_tendencies=train_params["train_tendencies"],
+                                                            batch_size=video_length,
+                                                            train=False,
+                                                            stride=train_params["target_step"],
+                                                            distributed=dist.is_initialized(),
+                                                            num_frames=train_params["num_frames"],
+                                                            num_out_frames=train_params["num_out_frames"],
+                                                            num_workers=2,
+                                                            pin_memory=train_params["pin_memory"])
+
+            inp, tar = next(iter(dataloader_video))
+
+            # no prior files
+            ic = inp[0].unsqueeze(0).to(device, dtype=torch.float32)
+            current_rollout_length = 0
+            print("No existing files—starting fresh.")
+
+        print("IC shape:", ic.shape, "| resume step:", current_rollout_length, " | 'IC.device: ",ic.device)
 
         pred_np_arr = []
         for i in range(current_rollout_length, rollout_length):
             pred, ic = single_step_rollout(model, ic, train_tendencies=train_params["train_tendencies"])
-            # ic = pred.clone()
 
-            if (i+1)%100==0:
-                print(f'#{i+1} ic shape {ic.shape} -- Pred {pred.shape} ')
+            # if (i+1)%1000==0:
+            #     print(f'#{i+1} ic shape {ic.shape} -- Pred {pred.shape} ')
 
             pred_np = pred.clone().transpose(-1,-2).squeeze().detach().cpu().numpy()
 
             # print(f'pred_np {pred_np.shape} -- pred_np[0,:] {pred_np[0,:].shape}', )
 
             # Unnormalize data
-            pred_np[0,:] = (pred_np[0,:]  * dataset.input_std[0]) + dataset.input_mean[0]
-            pred_np[1,:] = (pred_np[1,:]  * dataset.input_std[1]) + dataset.input_mean[1]
+            for ch in range(C):
+                pred_np[ch] = (pred_np[ch] * dataset.input_std[ch]) + dataset.input_mean[ch]
 
             # Saving chunks of data
             pred_np_arr.append(pred_np)
 
-            if (i+1) % long_analysis_params["num_snapshots_per_file"] == 0:
-                np.save(save_dir + f'/{i+1+current_rollout_length}.npy', np.stack(pred_np_arr, axis=0))
-                print(f'{i+1+current_rollout_length}.npy saved', np.asarray(pred_np_arr).shape)
+            if (i+1) % chunk_size == 0:
+                np.save(save_dir + f'/{i+1}.npy', np.stack(pred_np_arr, axis=0))
+                print(f'{i+1}.npy saved', np.asarray(pred_np_arr).shape)
 
                 pred_np_arr = []
 
-            # np.save(save_dir + f'/{i}.npy', pred_np)
-            # if i%100==0:
-            #     print(f'{i}.npy saved')
-        # print(pred.shape, pred_np.shape)
-
-        # Calculate number of files in save directory, proceed with analysis if saved data found
-        # Log that save data is found
 
     if long_analysis_params["temporal_mean"] or long_analysis_params["zonal_mean"] or long_analysis_params["spectra"] or \
         long_analysis_params["zonal_eof_pc"] or long_analysis_params["div"] or long_analysis_params["video"] or \

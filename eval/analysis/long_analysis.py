@@ -14,7 +14,7 @@ from py2d.spectra import spectrum_angled_average, spectrum_zonal_average
 
 from analysis.metrics import manual_eof, manual_svd_eof, divergence, PDF_compute
 from analysis.rollout import n_step_rollout
-from analysis.io_utils import load_numpy_data, get_npy_files, get_mat_files_in_range, run_notebook_as_script
+from analysis.io_utils import load_numpy_data, get_npy_files, get_mat_files_in_range, run_notebook_as_script, frame_generator
 from analysis.plot_config import params
 
 def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_params, train_params):
@@ -106,40 +106,27 @@ def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_
         Omega_arr = []
         U_arr = []
 
-        for i, file in enumerate(files):
+        frame_gen = frame_generator(
+            dataset, files, save_dir,
+            train_params["data_dir"], Kx, Ky, invKsq
+        )
+
+        # initialize all your accumulators here…
+        total_files_analyzed = 0
+
+        for U, V, Omega in frame_gen:
             # if dataset == 'emulate' and i > long_analysis_params["analysis_length"]:
             #     break
-            if dataset == 'emulate' and i > long_analysis_params["analysis_length"]:
-                total_files_analyzed = i # i starts from 0 total_files_analyzed = (i+1)-1
+            if dataset == 'emulate' and total_files_analyzed >= long_analysis_params["analysis_length"]:
                 print('break after analyzing # files ', total_files_analyzed)
                 break
-            else:
-                total_files_analyzed = i+1
+            total_files_analyzed = total_files_analyzed+1
 
-            if i%100 == 0:
+            if total_files_analyzed%100 == 0:
                 if dataset == 'emulate':
-                    print(f'File {i}/{ long_analysis_params["analysis_length"]}')
+                    print(f'File {total_files_analyzed}/{long_analysis_params["analysis_length"]}')
                 else:
-                    print(f'File {i}/{len(files)}')
-
-            if dataset == 'emulate':
-                data  = np.load(os.path.join(save_dir, file))
-                U = data[0,:]
-                V = data[1,:]
-                Omega_transpose = UV2Omega(U.T, V.T, Kx, Ky, spectral = False)
-                Omega = Omega_transpose.T
-
-            elif dataset == 'train' or dataset == 'truth':
-
-                data = loadmat(os.path.join(train_params["data_dir"], 'data', file))
-                Omega = data['Omega'].T
-                U_transpose, V_transpose = Omega2UV(Omega.T, Kx, Ky, invKsq, spectral = False)
-                U, V = U_transpose.T, V_transpose.T
-
-            ## dataset should be float 32 as geenrated by the emulator
-            U = U.astype(np.float32)
-            V = V.astype(np.float32)
-            Omega = Omega.astype(np.float32)
+                    print(f'File {total_files_analyzed}/{len(files)}')
 
             if long_analysis_params["temporal_mean"]:
                 U_mean_temp += U
@@ -322,54 +309,75 @@ def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_
         print(e)
 
     if long_analysis_params["video"]:
-
         print("---------------------- Making Video")
 
-        # Data predicted by the emualtor
         files_emulate = get_npy_files(save_dir)
-        files_train = get_mat_files_in_range(os.path.join(train_params["data_dir"],'data'), train_params["train_file_range"])
+        files_train   = get_mat_files_in_range(
+                            os.path.join(train_params["data_dir"], 'data'),
+                            train_params["train_file_range"]
+                        )
 
-        plt_save_dir = os.path.join(dataset_params["root_dir"], dataset_params["run_num"], "plots")
+        # build our two frame‐by‐frame generators
+        frame_gen_emulate = frame_generator(
+            "emulate", files_emulate, save_dir,
+            train_params["data_dir"], Kx, Ky, invKsq
+        )
+        frame_gen_train = frame_generator(
+            "train", files_train, save_dir,
+            train_params["data_dir"], Kx, Ky, invKsq
+        )
+
+        plt_save_dir = os.path.join(
+            dataset_params["root_dir"],
+            dataset_params["run_num"],
+            "plots"
+        )
         os.makedirs(plt_save_dir, exist_ok=True)
-        
+
         frames = []
-        for t in range(long_analysis_params["video_length"]):
-            if t%1 == 0:
-                fig, axs = plt.subplots(nrows=2, ncols=2, sharex=True, sharey=True)
-                plt.rcParams.update(params)
+        for frame_idx in range(long_analysis_params["video_length"]):
+            try:
+                U_emulate, V_emulate, _ = next(frame_gen_emulate)
+            except StopIteration:
+                print("Emulator generator exhausted at frame", frame_idx)
+                break
+            
+            for i in range(train_params["target_step"]):
+                try:
+                    U_train, V_train, _ = next(frame_gen_train)
+                except StopIteration:
+                    print("Train generator exhausted at frame", frame_idx)
+                    break
 
-                axs = axs.flatten()
+            # now make your 2×2 plot
+            fig, axs = plt.subplots(2, 2, sharex=True, sharey=True)
+            plt.rcParams.update(params)
+            axs = axs.flatten()
 
-                data_emulate = np.load(os.path.join(save_dir, files_emulate[t]))
-                U_emulate = data_emulate[0,:]
-                V_emulate = data_emulate[1,:]
+            data_list = [U_emulate, V_emulate, U_train, V_train]
+            titles    = [r'$u$ Emulator', r'$v$ Emulator',
+                        r'$u$ Truth',    r'$v$ Truth']
 
-                data_train = loadmat(os.path.join(train_params["data_dir"], 'data', files_train[train_params["target_step"]*t]))
-                Omega_train = data_train['Omega'].T
-                U_transpose, V_transpose = Omega2UV(Omega_train.T, Kx, Ky, invKsq, spectral = False)
-                U_train, V_train = U_transpose.T, V_transpose.T
+            for ax, d, title in zip(axs, data_list, titles):
+                im = ax.imshow(d, cmap='bwr', vmin=-5, vmax=5, aspect='equal')
+                L = d.shape[-1]
+                ax.set_xticks([0, L/2, L], [0, r'$\pi$', r'$2\pi$'])
+                ax.set_yticks([0, L/2, L], [0, r'$\pi$', r'$2\pi$'])
+                ax.set_title(title)
 
-                data = [U_emulate, V_emulate, U_train, V_train]
-                titles = [r'$u$ Emulator', r'$v$ Emulator', r'$u$ Truth', r'$v$ Truth']
+            fig.subplots_adjust(right=0.85)
+            cax = fig.add_axes([0.9, 0.15, 0.05, 0.7])
+            fig.colorbar(im, cax=cax)
+            fig.suptitle(f"{frame_idx+1} $\Delta t$")
 
-                for i, ax in enumerate(axs):
+            tmpfile = os.path.join(plt_save_dir, f"temp.png")
+            fig.savefig(tmpfile, dpi=100)
+            plt.close(fig)
 
-                    data_i = data[i] #.transpose((-1,-2))
-                    im = ax.imshow(data_i, cmap='bwr', vmin=-5, vmax=5, aspect='equal')
-                    xlen = data_i.shape[-1]
-                    ax.set_title(titles[i])
-                    ax.set_xticks([0, xlen/2, xlen], [0, r'$\pi$', r'$2\pi$']) 
-                    ax.set_yticks([0, xlen/2, xlen], [0, r'$\pi$', r'$2\pi$'])
-                fig.subplots_adjust(right=0.85)
-                cbar_ax = fig.add_axes([0.9, 0.15, 0.05, 0.7])
-                fig.colorbar(im, cax=cbar_ax)
-                fig.suptitle(f'{t+1}$\Delta t$')
-                fig.savefig('temp_frame.png', bbox_inches='tight')
-                plt.close()
+            frames.append(imageio.imread(tmpfile))
+            print(f"Rendered frame {frame_idx+1}/{long_analysis_params['video_length']}")
 
-                frames.append(imageio.imread('temp_frame.png'))
-
-                if t%1 == 0:
-                    print(f'Frame {t}/{long_analysis_params["video_length"]}')
-
-        imageio.mimsave(plt_save_dir + '/Video.gif', frames, fps=15)
+        # write the gif
+        gif_path = os.path.join(plt_save_dir, "Video.gif")
+        imageio.mimsave(gif_path, frames, fps=15)
+        print("Saved video to", gif_path)
