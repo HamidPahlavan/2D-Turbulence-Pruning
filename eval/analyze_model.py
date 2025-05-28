@@ -15,7 +15,7 @@ from src.models.vision_transformer import ViT
 from src.utils.data_loaders import get_dataloader
 
 from analysis.short_analysis import perform_short_analysis
-from analysis.long_analysis import perform_long_analysis
+from analysis.long_analysis_parallel import perform_long_analysis
 from analysis.io_utils import load_params, get_npy_files
 from analysis.rollout import n_step_rollout, single_step_rollout
 
@@ -108,7 +108,7 @@ def main(config):
     os.makedirs(plot_dir, exist_ok=True)
 
     # Initiate dataloaders
-    test_file_range = (test_file_start_idx, test_file_start_idx+(test_length_short*num_tests*train_params["target_step"])-1)
+    test_file_range = (test_file_start_idx, test_file_start_idx+(test_length_short*(num_tests+2)*train_params["target_step"])-1)
     dataloader, dataset = get_dataloader(data_dir=train_params["data_dir"],
                                         file_range=test_file_range,
                                         target_step=train_params["target_step"],

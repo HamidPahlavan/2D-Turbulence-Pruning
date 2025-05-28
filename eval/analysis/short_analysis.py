@@ -23,6 +23,9 @@ def perform_short_analysis(model, dataloader, dataset, climo_u, climo_v, short_a
     spectra_list, spectra_tar_list, wavenumbers_list = [], [], None
 
     for i, batch in enumerate(dataloader):
+        if i > short_analysis_params["num_ensembles"]:
+            break
+        
         print(f'Prediction iteration: {i}')
         inputs, targets = batch[0].to(device, dtype=torch.float32), batch[1].to(device, dtype=torch.float32)
         ic = inputs[0].unsqueeze(dim=0)
@@ -48,7 +51,7 @@ def perform_short_analysis(model, dataloader, dataset, climo_u, climo_v, short_a
         pred_v = (pred_v * dataset.input_std[1] + dataset.input_mean[1])
         tar_u = (tar_u * dataset.label_std[0] + dataset.label_mean[0])
         tar_v = (tar_v * dataset.label_std[1] + dataset.label_mean[1])
-
+        
         if rmse_flag:
             rmse_u.append(get_rmse(tar_u, pred_u, climo=climo_u))
             rmse_u_per.append(get_rmse(tar_u, per_pred_u, climo=climo_u))
