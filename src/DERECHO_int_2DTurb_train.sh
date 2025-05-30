@@ -27,9 +27,9 @@ source $HOME/set_wandb_key_dpp94.sh
 export WANDB_MODE=online
 
 # ----- Set args ----- #
-run_num=DERECHO_test
+run_num=SMAE_test
 yaml_config=/glade/u/home/dpatel/SSL-for-2D-Turbulence/src/config/vitnet_DERECHO.yaml
-config=BASE
+config=SMAE_PRETRAIN
 
 # ------ Run main script ------ #
 

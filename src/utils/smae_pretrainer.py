@@ -16,6 +16,74 @@ from natsort import natsorted
 
 #torch.backends.cuda.enable_flash_sdp(True)
 
+
+class SpectralLoss(torch.nn.Module):
+    def __init__(self, weighted=None, spatial_only=False, phase_reg=1.0, 
+                 adaptive_scaling=False, eps=1e-8):
+        super(SpectralLoss, self).__init__()
+        self.eps = eps
+        self.weighted = weighted
+        self.phase_reg = phase_reg 
+        self.adaptive_scaling = adaptive_scaling
+        if spatial_only:
+            self.fft_dims = (-2, -1)
+        else:
+            self.fft_dims = (-3, -2, -1)
+    
+    def wrap_phase(self, phase_diff): 
+        """Wrap phase difference to [-pi, pi]."""
+        return torch.remainder(phase_diff + torch.pi, 2 * torch.pi) - torch.pi
+
+    def forward(self, y, x):
+        # y: truth
+        # x: prediction
+
+        # Compute FFT
+        x_fft = torch.fft.fftn(x, dim=self.fft_dims, norm='ortho')
+        y_fft = torch.fft.fftn(y, dim=self.fft_dims, norm='ortho')
+
+        # Magnitude loss
+        magnitude_diff = torch.abs(x_fft - y_fft)
+
+        # Compute wrapped phase difference
+        phase_x = torch.angle(x_fft)
+        phase_y = torch.angle(y_fft)
+        phase_diff = phase_x - phase_y
+        wrapped_phase_diff = self.wrap_phase(phase_diff)
+
+        if self.weighted == 'inverse_power':
+            # Compute weights
+            power_y = torch.abs(y_fft) ** 2
+            total_power_y = torch.sum(power_y, dim=self.fft_dims, keepdim=True)
+            weights = total_power_y / (power_y + self.eps)
+            
+            # Weighted losses
+            magnitude_loss = torch.mean(weights * magnitude_diff ** 2)
+            phase_loss = torch.mean(weights * wrapped_phase_diff ** 2)
+        
+        elif self.weighted == 'log':
+            # Log transform to reduce scale discrepancy
+            log_magnitude_xfft = torch.log(torch.abs(x_fft) + self.eps)
+            log_magnitude_yfft = torch.log(torch.abs(y_fft) + self.eps)
+            log_magnitude_diff = log_magnitude_xfft - log_magnitude_yfft
+
+            magnitude_loss = torch.mean(log_magnitude_diff ** 2)
+            phase_loss = torch.mean(wrapped_phase_diff ** 2)
+
+        else:
+            # Unweighted losses
+            magnitude_loss = torch.mean(magnitude_diff ** 2)
+            phase_loss = torch.mean(wrapped_phase_diff ** 2)
+            
+        # Adaptive phase reg
+        if self.adaptive_scaling:
+            scaling_factor = magnitude_loss / (phase_loss + self.eps)
+        else:
+            scaling_factor = 1.
+        
+        return magnitude_loss + self.phase_reg * scaling_factor * phase_loss
+
+
 class Trainer():
     def __init__(self, params, world_rank):
         self.params = params
@@ -140,6 +208,12 @@ class Trainer():
         # Set optimizer
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=params["lr"], weight_decay=params["weight_decay"])
 
+        # Spectral loss
+        self.spectral_loss = SpectralLoss(weighted=params.Fourier_loss_weighted,
+                                          spatial_only=params.spectral_mask_spatial_only,
+                                          phase_reg=params.Fourier_loss_phase_reg,
+                                          adaptive_scaling=params.Fourier_loss_adaptive_scaling,
+                                          eps=params.Fourier_eps)
 
         if dist.is_initialized():
             self.model = DistributedDataParallel(self.model,
@@ -299,16 +373,14 @@ class Trainer():
             tr_start = time.time()
 
             # Preprocess
-            if self.params.preprocess:
-                if self.params.use_spectral_weights:
-                    inputs, labels, label_weights = self.preprocessor(inputs)
+            if self.params.preprocess == 'FourierPatch':
+                if self.params.target_full:
+                    inputs, _, _ = self.preprocessor(inputs)
                 else:
-                    inputs, labels = self.preprocessor(inputs)
-                    label_weights = None
-                # If need to separately filter inputs and labels (e.g., ts=1), modify preprocessor to
-                # return filter and also optionally accept filter... then return filters used
-                # for generating inputs and pass that to preprocessor when generating labels.
-                # MAKE SURE TO ALSO MODIFY VALIDATION CODE BELOW!
+                    inputs, labels, _ = self.preprocessor(inputs)
+            elif self.params.preprocess == 'Fourier':
+                # Modify so that it parallels 'FourierPatch'
+                raise NotImplementedError
 
             self.model.zero_grad()
             self.optimizer.zero_grad(set_to_none=True)
@@ -323,10 +395,23 @@ class Trainer():
 
             outputs = self.model(inputs, train=True)
            
-            if dist.is_initialized():
-                loss = self.model.module.forward_loss(labels, outputs, weights=label_weights)
+            # Fourier loss
+            if self.params.Fourier_loss:
+                fourier_loss = self.spectral_loss(labels, outputs)
             else:
-                loss = self.model.forward_loss(labels, outputs, weights=label_weights)
+                fourier_loss = 0.
+            
+            # Pixel loss
+            if self.params.pixel_loss:
+                if dist.is_initialized():
+                    pixel_loss = self.model.module.forward_loss(labels, outputs)
+                else:
+                    pixel_loss = self.model.forward_loss(labels, outputs)
+            else:
+                pixel_loss = 0.
+            
+            loss = (1. - self.params.pixel_loss_reg) * fourier_loss + \
+                self.params.pixel_loss_reg * pixel_loss
 
             loss.backward()
 
@@ -399,22 +484,34 @@ class Trainer():
                 inputs, labels = data[0].to(self.device, dtype=torch.float32), data[1].to(self.device, dtype=torch.float32)
 
                 # Preprocess
-                if self.params.preprocess:
-                    if self.params.use_spectral_weights:
-                        inputs, labels, label_weights = self.preprocessor(inputs)
+                if self.params.preprocess == 'FourierPatch':
+                    if self.params.target_full:
+                        inputs, _, _ = self.preprocessor(inputs)
                     else:
-                        inputs, labels = self.preprocessor(inputs)
-                        label_weights = None
-                    # If need to separately filter inputs and labels (e.g., ts=1), modify preprocessor to
-                    # return filter and also optionally accept filter... then return filters used
-                    # for generating inputs and pass that to preprocessor when generating labels.
+                        inputs, labels, _ = self.preprocessor(inputs)
+                elif self.params.preprocess == 'Fourier':
+                    # Modify so that it parallels 'FourierPatch'
+                    raise NotImplementedError
 
                 outputs = self.model(inputs, train=False)
 
-                if dist.is_initialized():
-                    loss = self.model.module.forward_loss(labels, outputs, weights=label_weights)
+                # Fourier loss
+                if self.params.Fourier_loss:
+                    fourier_loss = self.spectral_loss(labels, outputs)
                 else:
-                    loss = self.model.forward_loss(labels, outputs, weights=label_weights)
+                    fourier_loss = 0.
+                
+                # Pixel loss
+                if self.params.pixel_loss:
+                    if dist.is_initialized():
+                        pixel_loss = self.model.module.forward_loss(labels, outputs)
+                    else:
+                        pixel_loss = self.model.forward_loss(labels, outputs)
+                else:
+                    pixel_loss = 0.
+                
+                loss = (1. - self.params.pixel_loss_reg) * fourier_loss + \
+                    self.params.pixel_loss_reg * pixel_loss
 
                 # check valid pred
                 self.val_pred = outputs

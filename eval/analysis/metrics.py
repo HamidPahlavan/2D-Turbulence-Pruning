@@ -76,7 +76,7 @@ def spectrum_zonal_average_2D_FHIT(U,V):
 
   # Average over the second dimension
   # Multiplying by 2 to account for the negative wavenumbers
-  E_hat = np.mean(np.abs(E_hat), axis=0) #axis=0
+  E_hat = np.mean(np.abs(E_hat) ** 2, axis=0) #axis=0
   wavenumbers = np.linspace(0, N_LES//2, N_LES//2+1)
 
   return E_hat, wavenumbers

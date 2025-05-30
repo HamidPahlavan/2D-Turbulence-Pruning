@@ -6,7 +6,9 @@ from scipy.signal.windows import gaussian, tukey
 
 
 def get_spectral_preprocessor(params):
-    if params.preprocess == 'Fourier':
+    if params.preprocess == 'FourierPatch':
+        return FourierPatchFilterPreprocess(params)
+    elif params.preprocess == 'Fourier':
       return FourierFilterPreprocessor(params)
     elif params.preprocess == 'Wavelet':
       raise NotImplementedError
@@ -172,3 +174,121 @@ class FourierFilterPreprocessor(nn.Module):
         f1, f2 = self._generate_filter_batch()
 
         return self._apply_filter(x, f1, f2)
+
+
+class FourierPatchFilterPreprocess(nn.Module):
+    """
+    Preprocessor that masks spectral patches in 3D Fourier domain.
+    """
+
+    def __init__(self, params):
+        super().__init__()
+        self.patch_size = params["spectral_patch_size"]           # (pt, ph, pw)
+        self.mask_ratio = params["spectral_mask_ratio"]           # float in (0, 1)
+        self.spatial_only = params["spectral_mask_spatial_only"]  # bool
+        if self.spatial_only:
+            self.fft_dims = (-2, -1)
+        else:
+            self.fft_dims = (-3, -2, -1)
+
+    def _create_positive_freq_mask(self, shape, device):
+        b, c, t, h, w = shape
+        pt, ph, pw = self.patch_size
+
+        # For fftn (real input), we must include Nyquist freq
+        t_half = t // 2 if t > 1 else 1
+        h_half = h // 2
+        w_half = w // 2
+
+        if self.spatial_only:
+            nt = 1
+            pt = t  # single chunk of all time slices
+            t_half = t
+        else:
+            nt = max(t_half // pt, 1) if t > 1 else 1
+        nh = h_half // ph
+        nw = w_half // pw
+
+        total_patches = c * nt * nh * nw
+
+        patch_mask = torch.ones((b, total_patches), device=device)
+        for i in range(b):
+            drop_count = int(self.mask_ratio * total_patches)
+            drop_idx = torch.randperm(total_patches, device=device)[:drop_count]
+            patch_mask[i, drop_idx] = 0.0
+
+        patch_mask = patch_mask.view(b, c, nt, nh, nw)
+
+        rep_t = pt if (not self.spatial_only and t > 1) else t
+
+        freq_mask = patch_mask.repeat_interleave(rep_t, dim=2) \
+                              .repeat_interleave(ph, dim=3) \
+                              .repeat_interleave(pw, dim=4)
+
+        # Trim to exact size
+        freq_mask = freq_mask[:, :, :t_half, :h_half, :w_half]
+
+        # Pad to include Nyquist freq (i.e., +1 along h and w)
+        pad_t = (t % 2 == 0 and t > 1) and not self.spatial_only
+        pad_h = (h % 2 == 0)
+        pad_w = (w % 2 == 0)
+
+        pad = [0, int(pad_w), 0, int(pad_h), 0, int(pad_t)]  # F.pad expects reversed order
+        freq_mask = torch.nn.functional.pad(freq_mask, pad, mode='replicate')
+
+        return freq_mask  # now shape: [b, c, t//2 (+1), h//2+1, w//2+1]
+
+    def _mirror_hermitian(self, x, full_size, dim):
+        """
+        Reconstruct Hermitian-symmetric full mask along a given dim.
+        Mirrors the positive frequencies excluding DC and Nyquist.
+        """
+        half = x.shape[dim]
+        N = full_size[dim]
+        if N == 1:
+            return x
+
+        flip_slice = [slice(None)] * x.ndim
+        if N % 2 == 0:
+            start = 1
+            end = half - 1
+        else:
+            start = 1
+            end = half
+
+        # Only mirror if there's something to mirror
+        if end <= start:
+            return x
+
+        flip_slice[dim] = slice(start, end)
+        flipped = torch.flip(x[tuple(flip_slice)], dims=[dim])
+        return torch.cat([x, flipped], dim=dim)
+
+    def _make_hermitian_mask(self, half_mask, full_shape):
+
+        mask = half_mask
+        for dim in self.fft_dims:  
+            mask = self._mirror_hermitian(mask, full_shape, dim)
+
+        assert mask.shape[-(len(self.fft_dims)):] == full_shape[-(len(self.fft_dims)):], \
+            f"Expected shape {full_shape[-(len(self.fft_dims)):]}, got {mask.shape[-(len(self.fft_dims)):]}"
+
+        return mask
+
+    def forward(self, x):
+        x_shape = x.shape
+        device = x.device
+
+        half_mask = self._create_positive_freq_mask(x_shape, device)
+        full_mask = self._make_hermitian_mask(half_mask, x_shape)
+        full_mask_complement = 1. - full_mask
+
+        x_fft = torch.fft.fftn(x, dim=self.fft_dims, norm='ortho')
+
+        x_fft_masked = x_fft * full_mask
+        x_fft_masked_complement = x_fft * full_mask_complement
+
+        x_out = torch.fft.ifftn(x_fft_masked, dim=self.fft_dims, norm='ortho').real
+        x_out_complement = torch.fft.ifftn(x_fft_masked_complement, dim=self.fft_dims, norm='ortho').real
+
+        return x_out, x_out_complement, full_mask
