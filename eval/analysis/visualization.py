@@ -396,7 +396,7 @@ def ensembles_analysis_return_period(data_analysis_dir, data_run_names, var_name
     if data_type in ['train']:
         data_arr = data_arr[::3]
         return_periods, data_amplitude, _, _  = ensemble_return_period_amplitude(
-            np.asarray(np.abs(data_arr)), dt=dt/3, bins_num=bins_num, central_tendency=central_tendency, error_bands=None)
+            np.asarray(np.abs(data_arr)), dt=dt, bins_num=bins_num, central_tendency=central_tendency, error_bands=None)
 
         if var_name in ['U_min_arr', 'V_min_arr', 'Omega_min_arr']:
             data_amplitude = -1 * data_amplitude
