@@ -17,6 +17,29 @@ def get_spectral_preprocessor(params):
       raise ValueError("Invalid preprocessor type.")
 
 
+class SpatialLayerNorm(nn.Module):
+    """
+    Apply a per-sample normalization to mitigate spatial signal 
+    amplitude discrepancies across batch members as a result of
+    random spectral filtering.
+    """
+    def __init__(self, num_channels, affine=False):
+        super().__init__()
+        self.affine = affine
+        if self.affine:
+            self.gamma = nn.Parameter(torch.ones(1, num_channels, 1, 1, 1))
+            self.beta = nn.Parameter(torch.zeros(1, num_channels, 1, 1, 1))
+        else:
+            self.register_buffer('gamma', torch.ones(1, num_channels, 1, 1, 1))
+            self.register_buffer('beta', torch.ones(1, num_channels, 1, 1, 1))
+
+    def forward(self, x):
+        # x.shape: (B, C, T, H, W)
+        mean = x.mean(dim=(2, 3, 4), keepdim=True)
+        std = x.std(dim=(2, 3, 4), keepdim=True) + 1e-6
+        return self.gamma * (x - mean) / std + self.beta
+    
+
 class FourierFilterPreprocessor(nn.Module):
     """
     Preprocessor that spectrally filters data along spatial dimensions
@@ -38,6 +61,16 @@ class FourierFilterPreprocessor(nn.Module):
         self.use_spectral_weights = params['use_spectral_weights']
         self.spectrally_weigh_input = params['spectrally_weigh_input']
         self.spectrally_weigh_output = params['spectrally_weigh_output']
+
+        self.apply_norm = params["spectral_mask_apply_norm"]  # bool
+
+        if self.apply_norm:
+            self.norm = SpatialLayerNorm(
+                num_channels = params["in_chans"],
+                affine = params["spectral_mask_apply_affine"]
+            )
+        else:
+            self.norm = nn.Identity()
 
     def _create_window(self):
         """Create a 2D window for frequency domain filtering."""
@@ -146,6 +179,9 @@ class FourierFilterPreprocessor(nn.Module):
         if self.spectrally_weigh_output:
             x2 = x2 * x2_weights
 
+        # Applying layernorm only to input
+        x1 = self.norm(x1)
+        
         if self.use_spectral_weights:
             return x1, x2, x2_weights
 
@@ -185,9 +221,19 @@ class FourierPatchFilterPreprocess(nn.Module):
 
     def __init__(self, params):
         super().__init__()
-        self.patch_size = params["spectral_patch_size"]           # (pt, ph, pw)
-        self.mask_ratio = params["spectral_mask_ratio"]           # float in (0, 1)
-        self.spatial_only = params["spectral_mask_spatial_only"]  # bool
+        self.patch_size = params["spectral_patch_size"]               # (pt, ph, pw)
+        self.mask_ratio = params["spectral_mask_ratio"]               # float in (0, 1)
+        self.spatial_only = params["spectral_mask_spatial_only"]      # bool
+        self.apply_norm = params["spectral_mask_apply_norm"]  # bool
+
+        if self.apply_norm:
+            self.norm = SpatialLayerNorm(
+                num_channels = params["in_chans"],
+                affine = params["spectral_mask_apply_affine"]
+            )
+        else:
+            self.norm = nn.Identity()
+            
         if self.spatial_only:
             self.fft_dims = (-2, -1)
         else:
@@ -292,5 +338,8 @@ class FourierPatchFilterPreprocess(nn.Module):
 
         x_out = torch.fft.ifftn(x_fft_masked, dim=self.fft_dims, norm='ortho').real
         x_out_complement = torch.fft.ifftn(x_fft_masked_complement, dim=self.fft_dims, norm='ortho').real
+
+        # Applying layernorm only to input
+        x_out = self.norm(x_out)
 
         return x_out, x_out_complement, full_mask

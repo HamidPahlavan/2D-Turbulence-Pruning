@@ -155,6 +155,9 @@ class Trainer():
             mlp_ratio=params["mlp_ratio"],
             num_out_frames=params["num_out_frames"],
             patch_recovery=params["patch_recovery"],
+            drop_path=params["drop_path"],
+            proj_drop=params["proj_drop"],
+            attn_drop=params["attn_drop"],
             checkpointing=params["checkpointing"])
 
         # If finetuning, load pre-trained model weights
