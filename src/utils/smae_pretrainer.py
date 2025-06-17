@@ -384,9 +384,9 @@ class Trainer():
             elif self.params.preprocess == 'Fourier':
                 # Modify so that it parallels 'FourierPatch'
                 if self.params.target_full:
-                    inputs, _ = self.preprocessor(inputs)
+                    inputs, _ = self.preprocessor(inputs, self.epoch)
                 else:
-                    inputs, labels = self.preprocessor(inputs)
+                    inputs, labels = self.preprocessor(inputs, self.epoch)
 
             self.model.zero_grad()
             self.optimizer.zero_grad(set_to_none=True)
@@ -498,9 +498,9 @@ class Trainer():
                 elif self.params.preprocess == 'Fourier':
                     # Modify so that it parallels 'FourierPatch'
                     if self.params.target_full:
-                        inputs, _ = self.preprocessor(inputs)
+                        inputs, _ = self.preprocessor(inputs, self.epoch)
                     else:
-                        inputs, labels = self.preprocessor(inputs)
+                        inputs, labels = self.preprocessor(inputs, self.epoch)
 
                 outputs = self.model(inputs, train=False)
 

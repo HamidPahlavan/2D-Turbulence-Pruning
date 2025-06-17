@@ -72,6 +72,11 @@ class FourierFilterPreprocessor(nn.Module):
         else:
             self.norm = nn.Identity()
 
+        self.enable_curriculum_learning = params['enable_curriculum_learning']  # bool
+        self.cl_epochs = params['cl_epochs'] # list of epochs for cl
+        self.cl_kx_values = params['cl_window_centers_kx']  # list of kx values (vs epoch) for cl
+        self.cl_ky_values = params['cl_window_centers_ky']  # list of ky values (vs epoch) for cl
+
     def _create_window(self):
         """Create a 2D window for frequency domain filtering."""
 
@@ -110,11 +115,30 @@ class FourierFilterPreprocessor(nn.Module):
         window = torch.outer(window_x, window_y)
         return window, 1 - window
 
+    def _interpolate_filter_centers(self):
+        """
+        Interpolate between filter centers (kx, ky) for given epoch.
+        """
+        if self.epoch <= self.cl_epochs[0]:
+            return self.cl_kx_values[0], self.cl_ky_values[0]
+        elif self.epoch >= self.cl_epochs[-1]:
+            return self.cl_kx_values[-1], self.cl_ky_values[-1]
+        else:
+            # Find interval for linear interpolation
+            for i in range(len(self.cl_epochs) - 1):
+                if self.cl_epochs[i] <= self.epoch < self.cl_epochs[i+1]:
+                    fraction = (self.epoch - self.cl_epochs[i]) / (self.cl_epochs[i+1] - self.cl_epochs[i])
+                    kx = self.cl_kx_values[i] + fraction * (self.cl_kx_values[i+1] - self.cl_kx_values[i])
+                    ky = self.cl_ky_values[i] + fraction * (self.cl_ky_values[i+1] - self.cl_ky_values[i])
+                    return kx, ky
+
     def _generate_filter_batch(self):
 
-        if not self.randomized_filters:
+        if self.enable_curriculum_learning:
+            # Interpolate filter centers based on current epoch
+            kx, ky = self._interpolate_filter_centers()
             # Create single filter
-            shift_x, shift_y = self.window_center_kx[0] - self.window_width//2, self.window_center_ky[0] - self.window_width//2
+            shift_x, shift_y = int(kx - self.window_width//2), int(ky - self.window_width//2)
             f1, f2 = self._create_filter_kernel((shift_x, shift_y))
             # Expand into batch shape
             f1 = f1.unsqueeze(0).unsqueeze(0).unsqueeze(0)   # shape (1, 1, 1, h, w)
@@ -122,19 +146,29 @@ class FourierFilterPreprocessor(nn.Module):
             f1 = f1.expand(self.x_shape)
             f2 = f2.expand(self.x_shape)
         else:
-            f1 = torch.zeros(self.x_shape, device=self.device)
-            f2 = torch.zeros(self.x_shape, device=self.device)
-            for i in range(self.x_shape[0]):
-                # Select random cutoff between upper and lower thresholds
-                shift_x = torch.randint(low=self.window_center_kx[0], 
-                                        high=self.window_center_kx[1], 
-                                        size=(1,), 
-                                        dtype=torch.int16) - self.window_width//2
-                shift_y = torch.randint(low=self.window_center_ky[0], 
-                                        high=self.window_center_ky[0], 
-                                        size=(1,), 
-                                        dtype=torch.int16) - self.window_width//2
-                f1[i,..., :, :], f2[i, ..., :, :] = self._create_filter_kernel((shift_x, shift_y))
+            if not self.randomized_filters:
+                # Create single filter
+                shift_x, shift_y = self.window_center_kx[0] - self.window_width//2, self.window_center_ky[0] - self.window_width//2
+                f1, f2 = self._create_filter_kernel((shift_x, shift_y))
+                # Expand into batch shape
+                f1 = f1.unsqueeze(0).unsqueeze(0).unsqueeze(0)   # shape (1, 1, 1, h, w)
+                f2 = f2.unsqueeze(0).unsqueeze(0).unsqueeze(0)
+                f1 = f1.expand(self.x_shape)
+                f2 = f2.expand(self.x_shape)
+            else:
+                f1 = torch.zeros(self.x_shape, device=self.device)
+                f2 = torch.zeros(self.x_shape, device=self.device)
+                for i in range(self.x_shape[0]):
+                    # Select random cutoff between upper and lower thresholds
+                    shift_x = torch.randint(low=self.window_center_kx[0], 
+                                            high=self.window_center_kx[1], 
+                                            size=(1,), 
+                                            dtype=torch.int16) - self.window_width//2
+                    shift_y = torch.randint(low=self.window_center_ky[0], 
+                                            high=self.window_center_ky[0], 
+                                            size=(1,), 
+                                            dtype=torch.int16) - self.window_width//2
+                    f1[i,..., :, :], f2[i, ..., :, :] = self._create_filter_kernel((shift_x, shift_y))
 
         self.example_filter = f1[0]
 
@@ -197,17 +231,20 @@ class FourierFilterPreprocessor(nn.Module):
         filter appied to the first batch member."""
         return self._fftshift2d(self.example_filter)
 
-    def forward(self, x):
+    def forward(self, x, epoch):
         """
         Forward pass applying both filters (lowpass and highpass).
         Args:
           x (torch.Tensor): Input tensor of shape (batch, channels, time, height, width)
+          epoch (optional (int)): current epoch for determining filter design in curriculum learning
         Returns:
           tuple: (x1, x2) filtered outputs
         """
         self.x_shape = x.shape
         self.device = x.device
 
+        self.epoch = epoch
+        
         # Create filters (lowpass and highpass)
         f1, f2 = self._generate_filter_batch()
 
