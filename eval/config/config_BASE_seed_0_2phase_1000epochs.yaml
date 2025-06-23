@@ -1,0 +1,48 @@
+dataset_params:
+  run_num: "BASE_seed_0_2phase_1000epochs"
+  root_dir: "/lus/eagle/projects/MDClimSim/dpp94/SSL-2DTurb/BASE/"
+  model_filename: "training_checkpoints/best_ckpt.tar"
+  params_filename: "hyperparams.yaml"
+
+short_analysis_params:
+# on the fly analysis - plots are saved
+  rmse: !!bool False
+  acc: !!bool False
+  spectra: !!bool False
+  spectra_leadtimes: [0, 5, 10, 99]
+  analysis_length: 125 # number of training timesteps
+  num_ensembles: 20
+  test_file_start_idx: 350000
+  test_length_climo: 1000
+  plot_analysis: !!bool False
+  save_short_analysis: !!bool False
+  
+long_analysis_params:
+# For Train: Details would be taken from training config file
+  long_analysis_train: !!bool True
+
+# For Truth
+  long_analysis_truth: !!bool False
+  truth_file_range: [200000, 300000]
+
+# For emualtor
+  long_analysis_emulator: !!bool True
+# Data would be saved to perform any long analysis for emulator
+  save_data_length: 1000 # number of training timesteps emulated and saved
+  analysis_length: 1000 # number of training timesteps emulated for analysis (
+  # For Training data analysis_length is the smaller value in between analysis_length vs training_length
+
+# Analysis
+  temporal_mean: !!bool True
+  zonal_mean: !!bool True
+  spectra: !!bool True
+  zonal_eof_pc: !!bool True
+  eof_ncomp: 3
+  PC_autocorr_nlags: 300 # Number of lags (Emulator timesteps) for autocorrelation  # Ensure training/truth data is longer than this (3 times?)
+  div: !!bool True
+  return_period: !!bool True
+  return_period_anomaly: !!bool True
+  PDF_U: !!bool False # This may need large memory to compute
+  PDF_Omega: !!bool False # This may need large memory to compute
+  video: !!bool True
+  video_length: 250
