@@ -1,6 +1,6 @@
 ### base config ####
 BASE: &BASE
-    data_dir: '/lus/eagle/projects/MDClimSim/dpp94/2DTurbData/results/Re5000_fkx0fky4_r0.1_b20/NoSGS/NX256/dt0.0002_IC1/'
+    data_dir: '/lus/eagle/projects/MDClimSim/dpp94/2DTurbData/2dturbdata-2/results/Re5000_fkx0fky4_r0.1_b20/NoSGS/NX256/dt0.0002_IC1/'
 
     exp_dir: '/lus/eagle/projects/MDClimSim/dpp94/SSL-2DTurb/'
 
@@ -12,7 +12,7 @@ BASE: &BASE
     wandb_table_logging_interval: 25
     project: 'SSL-2DTurb'
     group: 'Dhruvit-base-emulator'
-    name: 'SOPHIA_test
+    name: 'BASE_seed_0_2phase_1000epochs'
     diagnostic_logs: !!bool True
 
     fresh_start: True # Training from checkpoint vs start (Need to test if it resumes at checkpoint)
@@ -74,19 +74,21 @@ MAE_PRETRAIN: &MAE_PRETRAIN
     init_seed: 0
 
     log_to_screen: !!bool True
-    log_to_wandb: !!bool False #True
-    wandb_table_logging_interval: 10
+    log_to_wandb: !!bool True
+    wandb_table_logging_interval: 25
     project: 'SSL-2DTurb'
     group: 'Dhruvit-mae-pretrain'
-    name: '0000'
+    name: 'MAE_mr0.5_seed_0_2phase'
     diagnostic_logs: !!bool True
 
     ckpt_epoch_list: []
 
+    max_epochs: 500
+
     target_step: 0
     target_step_hist: 3
 
-    train_file_range: [200000, 220000]
+    train_file_range: [[200000, 210000], [995000, 1004997]]
     valid_file_range: [310000, 312000]
 
     num_frames: 2
@@ -104,10 +106,10 @@ MAE_FINETUNE: &MAE_FINETUNE
 
     log_to_screen: !!bool True
     log_to_wandb: !!bool True
-    wandb_table_logging_interval: 10
+    wandb_table_logging_interval: 25
     project: 'SSL-2DTurb'
     group: 'Dhruvit-mae-finetune'
-    name: 'testing_diagnostics'
+    name: 'MAE_mr0.5_seed_0_2phase_ft_dropPR'
     diagnostic_logs: !!bool True
 
     ckpt_epoch_list: [1, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500]
@@ -115,7 +117,7 @@ MAE_FINETUNE: &MAE_FINETUNE
     target_step: 3
     target_step_hist: 3
 
-    train_file_range: [200000, 220000]
+    train_file_range: [[200000, 210000], [995000, 1004997]]
     valid_file_range: [310000, 312000]
    
     lr: 5e-4
@@ -126,9 +128,9 @@ MAE_FINETUNE: &MAE_FINETUNE
     num_out_frames: 1
 
     mae_finetune: True
-    mae_finetune_fp: '/pscratch/sd/d/dpp94/SSL-2DTurb/MAE_PRETRAIN/0002/training_checkpoints/best_ckpt.tar'
+    mae_finetune_fp: '/home/jovyan/shared/dpp94/ssl-2dturb-2/MAE_PRETRAIN/MAE_mr0.5_seed_0_2phase/training_checkpoints/best_ckpt.tar'
     freeze_layers: [] #['encoder', 'patch_embed']   
-    drop_layers: [] #['decoder', 'patchrecovery']
+    drop_layers: ['patchrecovery'] #['decoder', 'patchrecovery']
 
 
 
@@ -139,10 +141,10 @@ SMAE_PRETRAIN: &SMAE_PRETRAIN
 
     log_to_screen: !!bool True
     log_to_wandb: !!bool True
-    wandb_table_logging_interval: 20
+    wandb_table_logging_interval: 25
     project: 'SSL-2DTurb'
     group: 'Dhruvit-smae-pretrain'
-    name: '0000'
+    name: 'SMAE_seed_0_spatial_pixelonly_targetfull_0031_wtransition'
     diagnostic_logs: !!bool True
 
     ckpt_epoch_list: []
@@ -150,14 +152,28 @@ SMAE_PRETRAIN: &SMAE_PRETRAIN
     target_step: 0
     target_step_hist: 3
 
-    train_file_range: [200000, 220000]
+    train_file_range: [915000, 935000] #[[200000, 210000], [995000, 1004997]]
     valid_file_range: [310000, 312000]
+    batch_size: 64 # Global batch size (not per GPU)
+
+    lr: 5e-4
+    max_epochs: 500
+    weight_decay: 1e-7
+    proj_drop: 0.1 # dropout rate for projection ops
+    attn_drop: 0.1 # dropout rate for attention
+    drop_path: 0. # float(0., 1.) -> np.linspace(0, drop_path, encoder_depth)
 
     num_frames: 2
     tubelet_size: 2
-    num_out_frames: 2  
+    num_out_frames: 2
 
-    preprocess: 'Fourier'
+    preprocess: 'FourierPatch'  # ['Fourier', 'FourierPatch', 'Wavelet']
+    # For preprocess = 'FourierPatch'
+    spectral_patch_size: [1, 8, 8]    # [patch_t patch_h, patch_w]
+    spectral_mask_ratio: 0.125
+    target_full: True   # Use the full image as target
+    spectral_mask_spatial_only: True
+    # For preprocess = 'Fourier'
     window_width: 42
     window_center_kx: [24, 24] # range for locating center of window in x
     window_center_ky: [24, 24]
@@ -170,17 +186,34 @@ SMAE_PRETRAIN: &SMAE_PRETRAIN
     spectrally_weigh_input: False
     spectrally_weigh_output: False
 
+    # Additional spectral parameters
+    Fourier_loss: False
+    Fourier_loss_weighted: 'log'    # [None, 'inverse_power', 'log']
+    Fourier_loss_phase_reg: 1.
+    Fourier_loss_adaptive_scaling: True
+    Fourier_eps: 1e-8
+    pixel_loss: True
+    pixel_loss_reg: 1.
+    spectral_mask_apply_norm: False  # bool
+    spectral_mask_apply_affine: False  # bool
+
+    # curriculum learning
+    enable_curriculum_learning: False
+    cl_epochs: [0, 500]    # list of epochs for defining curriculum/schedule
+    cl_kx_values: [16, 112]
+    cl_ky_values: [16, 112]
+
 
 
 SMAE_FINETUNE: &SMAE_FINETUNE
-    <<: *SMAE_PRETRAIN
+    <<: *BASE
 
     log_to_screen: !!bool True
     log_to_wandb: !!bool True
-    wandb_table_logging_interval: 20
+    wandb_table_logging_interval: 25
     project: 'SSL-2DTurb'
     group: 'Dhruvit-smae-finetune'
-    name: '0000_v1_full'
+    name: 'SMAE_seed_0_spatial_pixelonly_targetfull_0031_ft_dropPR'
     diagnostic_logs: !!bool True
 
     ckpt_epoch_list: [1, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500]
@@ -188,8 +221,9 @@ SMAE_FINETUNE: &SMAE_FINETUNE
     target_step: 3
     target_step_hist: 3
 
-    train_file_range: [200000, 220000]
+    train_file_range: [[200000, 210000], [995000, 1004997]]
     valid_file_range: [310000, 312000]
+    batch_size: 32 # Global batch size (not per GPU)
 
     lr: 5e-4
     scheduler: 'ReduceLROnPlateau'
@@ -200,7 +234,7 @@ SMAE_FINETUNE: &SMAE_FINETUNE
     tubelet_size: 2
     num_out_frames: 1
 
-    smae_finetune: True
-    smae_finetune_fp: '/pscratch/sd/d/dpp94/SSL-2DTurb/SMAE_PRETRAIN/0000_v1/training_checkpoints/best_ckpt.tar'
+    mae_finetune: True
+    mae_finetune_fp: '/lus/eagle/projects/MDClimSim/dpp94/SSL-2DTurb/SMAE_PRETRAIN/SMAE_seed_0_2phase_spatial_pixelonly_targetfull_0031/training_checkpoints/best_ckpt.tar'
     freeze_layers: [] #['encoder', 'patch_embed']   
-    drop_layers: [] #['decoder', 'patchrecovery']
+    drop_layers: ['patchrecovery'] #['decoder', 'patchrecovery']  # patchembed and patchrecovery both automatically dropped due to shape mismatch
