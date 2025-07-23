@@ -11,10 +11,10 @@
 export MPICH_GPU_SUPPORT_ENABLED=1
 
 
-# COMMAND: qsub -N <job_name> -v run_num=<run_num> yaml_config=<yaml_config> config=<config> DERECHO_2DTurb_train.sh
+# COMMAND: qsub -N <job_name> -v run_num=<run_num>,yaml_config=<yaml_config>,config=<config> DERECHO_2DTurb_train.sh
 # <job_name>: Job name used by slurm
 # <run_num>: run_num used to create expDir to store all run details
-# <yaml_config>: absolute path for YAML config file
+# <yaml_config>: path for YAML config file (e.g., config/vitnet_DERECHO.yaml)
 # <config>: config name
 
 set -x

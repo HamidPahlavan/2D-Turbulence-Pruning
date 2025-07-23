@@ -378,9 +378,9 @@ class Trainer():
             # Preprocess
             if self.params.preprocess == 'FourierPatch':
                 if self.params.target_full:
-                    inputs, _, _ = self.preprocessor(inputs)
+                    inputs, _, _ = self.preprocessor(inputs, self.epoch)
                 else:
-                    inputs, labels, _ = self.preprocessor(inputs)
+                    inputs, labels, _ = self.preprocessor(inputs, self.epoch)
             elif self.params.preprocess == 'Fourier':
                 # Modify so that it parallels 'FourierPatch'
                 if self.params.target_full:
@@ -472,7 +472,6 @@ class Trainer():
             if self.params.log_to_wandb:
                 wandb.log(logs)
 
-
         return tr_time, data_time, logs
 
     def validate_one_epoch(self):
@@ -492,9 +491,9 @@ class Trainer():
                 # Preprocess
                 if self.params.preprocess == 'FourierPatch':
                     if self.params.target_full:
-                        inputs, _, _ = self.preprocessor(inputs)
+                        inputs, _, _ = self.preprocessor(inputs, self.epoch)
                     else:
-                        inputs, labels, _ = self.preprocessor(inputs)
+                        inputs, labels, _ = self.preprocessor(inputs, self.epoch)
                 elif self.params.preprocess == 'Fourier':
                     # Modify so that it parallels 'FourierPatch'
                     if self.params.target_full:
@@ -530,6 +529,7 @@ class Trainer():
                 if self.params.log_to_wandb:
                     if (self.epoch % self.params.wandb_table_logging_interval == 1) and (i == 0):
                         logging.info("Logging validation [input, target, prediction] to wandb table.")
+                        logging.info(f'Preprocessor mask ratio: {self.preprocessor.mask_ratio}')
                         _wandb_table = wandb.Table(columns=self.wandb_table.columns, data=self.wandb_table.data)
                         _wandb_table = log_input_target_prediction(inputs, labels, outputs, _wandb_table, self.epoch)
                         wandb.log({f"EPOCH {self.epoch} Validation Input/Target/Prediction" : _wandb_table})

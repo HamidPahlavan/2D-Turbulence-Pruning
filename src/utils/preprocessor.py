@@ -276,6 +276,10 @@ class FourierPatchFilterPreprocess(nn.Module):
         else:
             self.fft_dims = (-3, -2, -1)
 
+        self.enable_curriculum_learning = params['enable_curriculum_learning']  # bool
+        self.cl_epochs = params['cl_epochs'] # list of epochs for cl
+        self.cl_mask_ratio_values = params['cl_mask_ratio_values']  # list of mask ratios (vs epoch) for cl
+
     def _create_positive_freq_mask(self, shape, device):
         b, c, t, h, w = shape
         pt, ph, pw = self.patch_size
@@ -359,10 +363,31 @@ class FourierPatchFilterPreprocess(nn.Module):
             f"Expected shape {full_shape[-(len(self.fft_dims)):]}, got {mask.shape[-(len(self.fft_dims)):]}"
 
         return mask
+                
+    def _update_mask_ratio(self):
+        """
+        Update mask ratio for curriculum learning.
+        """
 
-    def forward(self, x):
+        if self.epoch <= self.cl_epochs[0]:
+            self.mask_ratio = self.cl_mask_ratio_values[0]
+        elif self.epoch >= self.cl_epochs[-1]:
+            self.mask_ratio = self.cl_mask_ratio_values[-1]
+        else:
+            # Find interval for linear interpolation
+            for i in range(len(self.cl_epochs) - 1):
+                if self.cl_epochs[i] <= self.epoch < self.cl_epochs[i+1]:
+                    fraction = (self.epoch - self.cl_epochs[i]) / (self.cl_epochs[i+1] - self.cl_epochs[i])
+                    self.mask_ratio = self.cl_mask_ratio_values[i] + fraction * (self.cl_mask_ratio_values[i+1] - self.cl_mask_ratio_values[i])
+                    break
+
+    def forward(self, x, epoch):
         x_shape = x.shape
         device = x.device
+
+        self.epoch = epoch
+        if self.enable_curriculum_learning:
+            self._update_mask_ratio()
 
         half_mask = self._create_positive_freq_mask(x_shape, device)
         full_mask = self._make_hermitian_mask(half_mask, x_shape)
