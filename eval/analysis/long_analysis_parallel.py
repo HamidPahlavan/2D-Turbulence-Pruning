@@ -81,7 +81,8 @@ def process_file(args):
             results["V_sum"] += V
             results["Omega_sum"] += Omega
 
-        if long_analysis_params["zonal_mean"] or long_analysis_params["zonal_eof_pc"]:
+        if long_analysis_params["zonal_mean"] or long_analysis_params["zonal_eof_pc"] or \
+            long_analysis_params["zonal_U"] or long_analysis_params["zonal_V"] or long_analysis_params["zonal_Omega"]:
             results["U_zonal"].append(np.mean(U, axis=1))
             results["V_zonal"].append(np.mean(V, axis=1))
             results["Omega_zonal"].append(np.mean(Omega, axis=1))
@@ -285,13 +286,18 @@ def perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_
                 spectra_U_zonal_avg=spectra_U_zonal_avg, spectra_V_zonal_avg=spectra_V_zonal_avg, spectra_Omega_zonal_avg=spectra_Omega_zonal_avg, wavenumber_zonal_avg=wavenumber_zonal_avg,
                 long_analysis_params=long_analysis_params, dataset_params=dataset_params)
 
-        if long_analysis_params["zonal_eof_pc"] or long_analysis_params["zonal_mean"]:
+        if long_analysis_params["zonal_eof_pc"] or long_analysis_params["zonal_mean"] or \
+            long_analysis_params["zonal_U"] or long_analysis_params["zonal_V"] or long_analysis_params["zonal_Omega"]:
 
             U_zonal_mean = np.mean(agg_results["U_zonal"], axis=0)
             Omega_zonal_mean = np.mean(agg_results["Omega_zonal"], axis=0)
             V_zonal_mean = np.mean(agg_results["V_zonal"], axis=0)
 
             np.savez(os.path.join(analysis_dir_save, 'zonal_mean.npz'), U_zonal_mean=U_zonal_mean, Omega_zonal_mean=Omega_zonal_mean, V_zonal_mean=V_zonal_mean, long_analysis_params=long_analysis_params, dataset_params=dataset_params)
+
+            np.savez(os.path.join(analysis_dir_save, 'zonal_U.npz'), U_zonal=np.asarray(agg_results["U_zonal"]), long_analysis_params=long_analysis_params, dataset_params=dataset_params)
+            np.savez(os.path.join(analysis_dir_save, 'zonal_V.npz'), V_zonal=np.asarray(agg_results["V_zonal"]), long_analysis_params=long_analysis_params, dataset_params=dataset_params)
+            np.savez(os.path.join(analysis_dir_save, 'zonal_Omega.npz'), Omega_zonal=np.asarray(agg_results["Omega_zonal"]), long_analysis_params=long_analysis_params, dataset_params=dataset_params)
 
             if long_analysis_params["zonal_eof_pc"]:
                 U_zonal_stack = np.stack(agg_results["U_zonal"], axis=0)        # shape (T, Nx)

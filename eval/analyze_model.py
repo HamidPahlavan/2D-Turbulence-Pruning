@@ -268,6 +268,7 @@ def main(config):
 
 
     if long_analysis_params["temporal_mean"] or long_analysis_params["zonal_mean"] or long_analysis_params["spectra"] or \
+        long_analysis_params["zonal_U"] or long_analysis_params["zonal_V"] or long_analysis_params["zonal_Omega"] or \
         long_analysis_params["zonal_eof_pc"] or long_analysis_params["div"] or long_analysis_params["video"] or \
         long_analysis_params["return_period"] or long_analysis_params["return_period_anomaly"] or long_analysis_params["PDF_U"] or long_analysis_params["PDF_Omega"]:
         perform_long_analysis(save_dir, analysis_dir, dataset_params, long_analysis_params, train_params)

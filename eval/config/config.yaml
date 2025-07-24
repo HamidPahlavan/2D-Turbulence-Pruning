@@ -1,5 +1,5 @@
 dataset_params:
-  run_num: "test"
+  run_num: "test10"
   root_dir: "/ocean/projects/atm170004p/jakhar/2d_emulator_vision/SSL-for-2D-Turbulence/results/BASE/"
   model_filename: "training_checkpoints/best_ckpt.tar"
   params_filename: "hyperparams.yaml"
@@ -11,8 +11,8 @@ short_analysis_params:
   spectra: !!bool True
   spectra_leadtimes: [0, 5, 10, 99]
   analysis_length: 100 # number of training timesteps
-  num_ensembles: 10
-  test_file_start_idx: 350000
+  num_ensembles: 2
+  test_file_start_idx: 5002
   test_length_climo: 1000
   plot_analysis: !!bool True
   save_short_analysis: !!bool True
@@ -23,28 +23,31 @@ long_analysis_params:
 
 # For Truth
   long_analysis_truth: !!bool True
-  truth_file_range: [5000, 1005000]
+  truth_file_range: [5000, 6000]
 
 # For emualtor
   long_analysis_emulator: !!bool True
 # Data would be saved to perform any long analysis for emulator
-  save_data_length: 10000 # number of training timesteps emulated and saved
-  num_snapshots_per_file: 1000 # number of snapshots saved in a single file
-  analysis_length: 10000 # number of trasining timesteps emulated for analysis (
+  save_data_length: 500 # number of training timesteps emulated and saved
+  num_snapshots_per_file: 100 # number of snapshots saved in a single file
+  analysis_length: 500 # number of trasining timesteps emulated for analysis (
   # For Training data analysis_length is the smaller value in between analysis_length vs training_length
 
 # Analysis
   temporal_mean: !!bool True
   zonal_mean: !!bool True
   spectra: !!bool True
+  zonal_U: !!bool True
+  zonal_V: !!bool True
+  zonal_Omega: !!bool True
   zonal_eof_pc: !!bool True
   eof_ncomp: 3
   PC_autocorr_nlags: 300 # Number of lags (Emulator timesteps) for autocorrelation  # Ensure training/truth data is longer than this (3 times?)
   div: !!bool True
-  return_period: !!bool False
+  return_period: !!bool True
   return_period_anomaly: !!bool False # This requires calclation of temporal_mean
   PDF_U: !!bool False # This may need large memory to compute
   PDF_Omega: !!bool False # This may need large memory to compute
-  video: !!bool True
+  video: !!bool False
   video_length: 300
 
