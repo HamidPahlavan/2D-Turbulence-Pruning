@@ -39,7 +39,7 @@ which python
 
 # ------ WANDB ------ #
 
-source $HOME/set_wandb_key_dpp94.sh
+source $HOME/set_wandb_key_pahlavan.sh
 export WANDB_MODE=online
 
 
