@@ -3,7 +3,7 @@
 #PBS -q main
 #PBS -l walltime=12:00:00
 #PBS -A UCHI0014
-#PBS -M dpatel505@gmail.com
+#PBS -M pahlavan@nwra.com
 #PBS -m abe
 #PBS -j oe
 
@@ -19,7 +19,7 @@ export MPICH_GPU_SUPPORT_ENABLED=1
 
 set -x
 
-cd /glade/u/home/dpatel/SSL-for-2D-Turbulence/src
+cd /glade/u/home/pahlavan/2D-Turbulence-Pruning/src
 
 # Activate conda env
 ml conda
