@@ -34,7 +34,7 @@ def single_step_rollout(model, ic, train_tendencies=False):
 
     n=1
     with torch.no_grad():
-        idx = torch.tensor([0])
+        idx = torch.tensor([0], device=ic.device)
         if train_tendencies:
             # WARNING: if num_out_frames > 1, only top frame is kept in auto-regressive rollout
             if ic.shape[2] > 1:

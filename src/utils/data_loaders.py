@@ -53,8 +53,16 @@ class TurbulenceDataset(torch.utils.data.Dataset):
             target_step_hist (int or None): Number of steps for previous samples in input.
         """
         self.data_dir = data_dir
-        self.input_file_numbers = list(range(file_range[0] + (num_frames - 1), file_range[1] + 1, stride))
-        self.label_file_numbers = list(range(file_range[0] + (num_frames - 1) + target_step, file_range[1]+1+target_step, stride))
+        if isinstance(file_range[0], list):
+            temp_inp, temp_label = [], []
+            for part in file_range:
+                temp_inp.append(list(range(part[0] + (num_frames - 1), part[1] + 1, stride)))
+                temp_label.append(list(range(part[0] + (num_frames - 1) + target_step, part[1]+1+target_step, stride)))
+            self.input_file_numbers = [item for sublist in temp_inp for item in sublist]
+            self.label_file_numbers = [item for sublist in temp_label for item in sublist]
+        else:
+            self.input_file_numbers = list(range(file_range[0] + (num_frames - 1), file_range[1] + 1, stride))
+            self.label_file_numbers = list(range(file_range[0] + (num_frames - 1) + target_step, file_range[1]+1+target_step, stride))
         #self.input_file_list = [os.path.join(data_dir, 'data', f"{i}.mat") for i in self.input_file_numbers]
         #self.label_file_list = [os.path.join(data_dir, 'data', f"{i}.mat") for i in self.label_file_numbers]
         self.target_step = target_step
@@ -93,7 +101,8 @@ class TurbulenceDataset(torch.utils.data.Dataset):
         if inp:
             mean_fp = os.path.join(self.data_dir, 'stats', 'mean_full_field.npy')
             std_fp = os.path.join(self.data_dir, 'stats', 'std_full_field.npy')
-            #mean_std_data = loadmat(os.path.join(self.data_dir, 'stats', 'mean_std_DNS_NX256_dt0.0002_IC1.mat_1.0.mat'))
+            #mean_std_data = loadmat(os.path.join(self.data_dir, 'stats', 'mean_std_DNS_NX64_dt0.0005_IC1.mat_1.0.mat'))
+            # mean_std_data = loadmat(os.path.join(self.data_dir, 'stats', 'mean_std_DNS_NX256_dt0.0002_IC1.mat_1.0.mat'))
         else:
             mean_fp = os.path.join(self.data_dir, 'stats', 'mean_tendencies.npy')
             std_fp = os.path.join(self.data_dir, 'stats', 'std_tendencies.npy')

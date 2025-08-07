@@ -33,6 +33,9 @@ class ViT(nn.Module):
       norm_layer=nn.LayerNorm,
       num_out_frames=1,
       patch_recovery='linear', # ['linear',conv','subpixel_conv']
+      drop_path=0., 
+      proj_drop=0.,
+      attn_drop=0.,
       checkpointing=None # gradient checkpointing
   ):
       super().__init__()
@@ -43,10 +46,11 @@ class ViT(nn.Module):
       num_patches = self.patch_embed.num_patches
 
       self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, encoder_embed_dim), requires_grad=False)
-    
-      drop_path = 0. * np.linspace(0., 0.2, encoder_depth)
+
+      
+      drop_path = drop_path * np.linspace(0., 1., encoder_depth)
       self.encoder_blocks = nn.ModuleList([
-          Block(encoder_embed_dim, encoder_num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer, drop_path=drop_path[i])
+          Block(encoder_embed_dim, encoder_num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer, proj_drop=proj_drop, attn_drop=attn_drop, drop_path=drop_path[i])
           for i in range(encoder_depth)
       ])
       self.norm = norm_layer(encoder_embed_dim)
@@ -70,7 +74,7 @@ class ViT(nn.Module):
           self.patchrecovery = PatchRecovery3D((num_out_frames,img_size,img_size), (num_frames//tubelet_size,patch_size,patch_size),
                                                 decoder_embed_dim, in_chans)
       elif patch_recovery == 'subpixel_conv':
-          self.patchrecovery = SubPixelConvICNR_3D((num_out_frames,img_size,img_size), (num_frames//tubelet_size,patch_size,patch_size),
+          self.patchrecovery = SubPixelConvICNR_3D((num_out_frames,img_size,img_size), (tubelet_size,patch_size,patch_size),
                                                    decoder_embed_dim, in_chans)
       self.patch_recovery = patch_recovery
       self.num_out_frames = num_out_frames

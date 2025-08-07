@@ -69,7 +69,7 @@ class MAEViT(nn.Module):
           self.patchrecovery = PatchRecovery3D((num_frames,img_size,img_size), (num_frames//tubelet_size,patch_size,patch_size),
                                                 decoder_embed_dim, in_chans)
       elif patch_recovery == 'subpixel_conv':
-          self.patchrecovery = SubPixelConvICNR_3D((num_frames,img_size,img_size), (num_frames//tubelet_size,patch_size,patch_size),
+          self.patchrecovery = SubPixelConvICNR_3D((num_frames,img_size,img_size), (tubelet_size,patch_size,patch_size),
                                                    decoder_embed_dim, in_chans)
       self.patch_recovery = patch_recovery
       self.num_out_frames = num_out_frames
@@ -221,7 +221,8 @@ class MAEViT(nn.Module):
       loss = (pred - tar) ** 2
       loss = loss.mean(dim=-1)  # loss per patch
 
-      loss = (loss * mask).sum() / mask.sum()  # loss on removed patches
+      #loss = (loss * mask).sum() / mask.sum()  # loss on removed patches
+      loss = loss.mean()   # loss on whole image
 
       return loss
 

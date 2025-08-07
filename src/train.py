@@ -7,6 +7,7 @@ import argparse
 from ruamel.yaml.comments import CommentedMap as ruamelDict
 from ruamel.yaml import YAML
 import numpy as np
+import glob
 
 
 def set_seed(seed):                                       
@@ -74,30 +75,27 @@ if __name__=='__main__':
 
     
     params['experiment_dir'] = os.path.abspath(expDir)
-    ckpt_path = 'training_checkpoints/ckpt.tar'
-    ckpt_epoch_path = 'training_checkpoints/ckpt'
+    ckpt_path_globstr = 'training_checkpoints/ckpt_*.tar'
     best_ckpt_path = 'training_checkpoints/best_ckpt.tar'
-    params['checkpoint_path'] = os.path.join(expDir, ckpt_path)
-    params['checkpoint_epoch_path'] = os.path.join(expDir, ckpt_epoch_path)
+    params['checkpoint_path_globstr'] = os.path.join(expDir, ckpt_path_globstr)
     params['best_checkpoint_path'] = os.path.join(expDir, best_ckpt_path)
 
-
-    checkpoint_exists = os.path.isfile(params.checkpoint_path)
-
+    checkpoint_paths = [file for file in glob.glob(params.checkpoint_path_globstr) if os.path.isfile(file)]
+    checkpoint_exists = len(checkpoint_paths) > 0
 
     # Determine whether to resume or start fresh
-    if params.fresh_start:
-        params["resuming"] = False
+    if params.fresh_start or args.fresh_start:
+        params['resuming'] = False
         if checkpoint_exists and world_rank == 0:
             logging.info("Fresh start requested. Ignoring existing checkpoint.")
     elif checkpoint_exists:
-         params['resuming'] = True
-         if world_rank == 0:
-            logging.info('Resuming from existing checkpoint.')
+        params['resuming'] = True
+        if world_rank == 0:
+            logging.info("Resuming from existing checkpoint.")
     else:
-         params['resuming'] = False
-         if world_rank == 0:
-            logging.info('No checkpoint found. Starting fresh training run.')
+        params['resuming'] = False
+        if world_rank == 0:
+            logging.info("No checkpoint found. Starting fresh training run.")
 
     params['local_rank'] = local_rank
 
